@@ -1,0 +1,60 @@
+MAP Program = {
+    STR name = "",
+    INT statements = 0
+}
+
+MAP Diagnostic = {
+    STR message = ""
+}
+
+ARR[Diagnostic] DiagnosticList = []
+
+MAP ParseResult = {
+    Program program = INIT,
+    DiagnosticList diagnostics = []
+}
+
+MAP Pair = {
+    INT foo = 0,
+    BOL bar = false
+}
+
+FN parseTokens() -> ParseResult = (
+    ret {
+        program = {
+            name = "demo",
+            statements = 3
+        },
+        diagnostics = [{
+            message = "ok"
+        }]
+    }
+)
+
+FN multipleReturn() -> Pair = (
+    ret {
+        foo = 42,
+        bar = true
+    }
+)
+
+FN testPropertyDestructure() -> BOL = (
+    {
+        Program .program,
+        DiagnosticList .diagnostics as diag
+    } = parseTokens()
+
+    ret program.name == "demo" && program.statements == 3 && len(diag) == 1 && diag.0.message == "ok"
+)
+
+FN testPositionalDestructure() -> BOL = (
+    {
+        INT foo,
+        BOL bar
+    } = multipleReturn()
+
+    ret foo == 42 && bar
+)
+
+assert(testPropertyDestructure(), "property destructure")
+assert(testPositionalDestructure(), "positional destructure")

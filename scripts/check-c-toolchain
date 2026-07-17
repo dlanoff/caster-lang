@@ -1,0 +1,152 @@
+#!/usr/bin/env sh
+set -eu
+
+required_standard=${CASTER_C_STANDARD:-c11}
+cflags=${CFLAGS:-}
+
+find_compiler() {
+    if [ -n "${CC:-}" ]; then
+        requested_bin=${CC%% *}
+        if command -v "$requested_bin" >/dev/null 2>&1; then
+            printf '%s\n' "$CC"
+            return 0
+        fi
+
+        if [ "$CC" != "cc" ]; then
+            return 2
+        fi
+    fi
+
+    for candidate in cc clang gcc; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+linux_install_hint() {
+    if [ -r /etc/os-release ]; then
+        os_id=$(awk -F= '/^ID=/{gsub(/"/, "", $2); print $2}' /etc/os-release)
+        case "$os_id" in
+            debian|ubuntu|linuxmint|pop)
+                printf '%s\n' "  sudo apt-get update && sudo apt-get install -y build-essential" >&2
+                return
+                ;;
+            fedora)
+                printf '%s\n' "  sudo dnf install -y gcc make" >&2
+                return
+                ;;
+            rhel|centos|rocky|almalinux)
+                printf '%s\n' "  sudo dnf groupinstall -y \"Development Tools\"" >&2
+                return
+                ;;
+            arch|manjaro)
+                printf '%s\n' "  sudo pacman -S --needed base-devel" >&2
+                return
+                ;;
+            alpine)
+                printf '%s\n' "  sudo apk add build-base" >&2
+                return
+                ;;
+            opensuse*|suse)
+                printf '%s\n' "  sudo zypper install -t pattern devel_C_C++" >&2
+                return
+                ;;
+        esac
+    fi
+
+    printf '%s\n' "  install gcc, clang, or your distro's build-essential/development-tools package" >&2
+}
+
+print_install_help() {
+    printf '%s\n' "caster: error: no C compiler found" >&2
+    printf '%s\n' "caster: install a C11-capable toolchain, then rerun make install-caster" >&2
+
+    os_name=$(uname -s 2>/dev/null || printf unknown)
+    case "$os_name" in
+        Darwin)
+            printf '%s\n' "  xcode-select --install" >&2
+            ;;
+        Linux)
+            linux_install_hint
+            ;;
+        FreeBSD|OpenBSD|NetBSD)
+            printf '%s\n' "  install clang or gcc with your system package manager" >&2
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            printf '%s\n' "  install LLVM clang or MSYS2/MinGW gcc, then run this from that shell" >&2
+            ;;
+        *)
+            printf '%s\n' "  install cc, clang, or gcc for this platform" >&2
+            ;;
+    esac
+}
+
+if compiler=$(find_compiler); then
+    :
+else
+    find_status=$?
+    if [ "$find_status" -eq 2 ]; then
+        printf '%s\n' "caster: error: requested C compiler '$CC' is not on PATH" >&2
+        printf '%s\n' "caster: unset CC to let Caster search for cc, clang, or gcc" >&2
+        printf '%s\n' "caster: otherwise install the requested compiler and rerun make install-caster" >&2
+        exit 1
+    fi
+    print_install_help
+    exit 1
+fi
+
+compiler_bin=${compiler%% *}
+if ! command -v "$compiler_bin" >/dev/null 2>&1; then
+    printf '%s\n' "caster: error: C compiler '$compiler' was requested but is not on PATH" >&2
+    exit 1
+fi
+
+case " $cflags " in
+    *" -std="*) ;;
+    *) cflags="-std=$required_standard $cflags" ;;
+esac
+
+tmp_dir=${TMPDIR:-/tmp}/caster-toolchain-$$
+mkdir -p "$tmp_dir"
+trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+
+check_src=$tmp_dir/check.c
+check_exe=$tmp_dir/check
+
+cat > "$check_src" <<'SRC'
+#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L
+#error "Caster requires C11 or newer"
+#endif
+
+#include <stdint.h>
+
+_Static_assert(sizeof(int64_t) == 8, "Caster requires int64_t");
+
+int main(void) {
+    int64_t value = 42;
+    return value == 42 ? 0 : 1;
+}
+SRC
+
+if ! $compiler $cflags "$check_src" -o "$check_exe" >/dev/null 2>&1; then
+    printf '%s\n' "caster: error: C compiler '$compiler' could not build a $required_standard sanity check" >&2
+    printf '%s\n' "caster: compiler flags: $cflags" >&2
+    exit 1
+fi
+
+if ! "$check_exe" >/dev/null 2>&1; then
+    printf '%s\n' "caster: error: C compiler '$compiler' built a test binary that did not run" >&2
+    exit 1
+fi
+
+version_line=$($compiler --version 2>/dev/null | sed -n '1p' || true)
+if [ -z "$version_line" ]; then
+    version_line="$compiler"
+fi
+
+printf '%s\n' "caster: C toolchain ok: $version_line"
+printf '%s\n' "caster: required C standard: $required_standard"

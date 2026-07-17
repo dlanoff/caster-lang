@@ -1,0 +1,60 @@
+use OS
+use FS
+use PATH
+use IO
+use PROC
+
+FN main() -> NUL = (
+    args = OS.args()
+    cwd = OS.cwd()
+    platform = OS.platform()
+    arch = OS.arch()
+
+    dir = PATH.join([".caster", "system_api"])
+    file = PATH.join([dir, "hello.txt"])
+    copy = PATH.join([dir, "copy.txt"])
+    moved = PATH.join([dir, "moved.txt"])
+
+    FS.mkdir(dir)
+    FS.write(file, "hello")
+    FS.append(file, " world")
+    FS.copy(file, copy)
+    FS.rename(copy, moved)
+
+    text = FS.read(file)
+    bytes = FS.readBytes(file)
+    stat = FS.stat(file)
+    entries = FS.list(dir)
+
+    OS.setEnv("CASTER_SYSTEM_TEST", "ok")
+    proc = PROC.run("echo", ["caster"])
+
+    IO.print("system adapter ok")
+
+    assert(len(args) > 0, "OS.args")
+    assert(len(cwd) > 0, "OS.cwd")
+    assert(len(platform) > 0 && len(arch) > 0, "OS platform information")
+    assert(OS.env("CASTER_SYSTEM_TEST") == "ok", "OS.env/setEnv")
+
+    assert(FS.exists(file), "FS.exists")
+    assert(text == "hello world", "FS.read/write/append")
+    assert(bytes.0 == 104 && bytes.10 == 100, "FS.readBytes")
+    assert(stat.exists && stat.isFile && !stat.isDir && stat.size == 11, "FS.stat file")
+    assert(has(entries, "hello.txt") && has(entries, "moved.txt"), "FS.list")
+
+    assert(PATH.parent(file) == dir, "PATH.parent")
+    assert(PATH.name(file) == "hello.txt", "PATH.name")
+    assert(PATH.ext(file) == ".txt", "PATH.ext")
+    assert(PATH.normalize(".caster/./system_api/../system_api/hello.txt") == file, "PATH.normalize")
+    assert(len(PATH.absolute(file)) > len(file), "PATH.absolute")
+
+    OS.chdir(dir)
+    assert(PATH.name(OS.cwd()) == "system_api", "OS.chdir")
+    OS.chdir(cwd)
+
+    assert(IO.stdin() == 0 && IO.stdout() == 1 && IO.stderr() == 2, "IO handles")
+    assert(proc.code == 0 && starts(proc.out, "caster"), "PROC.run")
+
+    FS.remove(file)
+    FS.remove(moved)
+)

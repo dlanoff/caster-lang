@@ -1,0 +1,48 @@
+use ./../driver/diagnostics
+use ./../ast/ast
+use ./../features/feature
+use ./cursor
+use ./toplevel
+use ./../lex/token
+
+MAP ParseResult = {
+    ARR[Token.Token] tokens = [],
+    Feature.FeatureSet features = INIT,
+    Ast.Program program = INIT,
+    ARR[Diagnostics.Diagnostic] diagnostics = []
+}
+
+FN tokenDiagnostic(STR file, Token.Token item, STR message) -> Diagnostics.Diagnostic = (
+    ret Diagnostics.diagnostic(file, item.span.line, item.span.col, item.span.endLine, item.span.endCol, "error", message)
+)
+
+FN parseTokens(STR file, Token.TokenList tokens, Feature.FeatureSet features) -> ParseResult = (
+    Cursor.State state = Cursor.new(file, tokens)
+    Ast.Program program = Toplevel.parseProgram(REF state)
+    diagnostics = []
+    depth = 0
+
+    loop([tokens])(
+        depth += Feature.delimiterDelta(features, e.kind)
+
+        if(depth < 0)(
+            *diagnostics.add(tokenDiagnostic(file, e, "unexpected closing delimiter"))
+            depth = 0
+        )
+    )
+
+    if(depth > 0)(
+        *diagnostics.add(Diagnostics.diagnostic(file, 1, 1, 1, 1, "error", "unclosed delimiter"))
+    )
+
+    loop([state.diagnostics])(
+        *diagnostics.add(e)
+    )
+
+    ret {
+        tokens = tokens,
+        features = features,
+        program = program,
+        diagnostics = diagnostics
+    }
+)

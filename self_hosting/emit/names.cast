@@ -1,0 +1,625 @@
+use ./../ast/ast
+
+ARR[STR] StringList = []
+
+MAP FunctionSig = {
+    STR name = "",
+    StringList params = INIT,
+    STR returnType = "NUL"
+}
+
+ARR[FunctionSig] FunctionSigList = []
+
+MAP FunctionTable = {
+    FunctionSigList functions = []
+}
+
+FN emptyStringList() -> StringList = (
+    ret []
+)
+
+FN startsWith(STR text, STR prefix) -> BOL = (
+    if(len(text) < len(prefix))(
+        ret false
+    )
+
+    chars = prefix.ARR()
+
+    loop([chars])(
+        if(text.i != e)(
+            ret false
+        )
+    )
+
+    ret true
+)
+
+FN stripRef(STR typeName) -> STR = (
+    out = ""
+    pos = 4
+
+    loop(pos < len(typeName) - 1)(
+        out += typeName.pos
+        pos += 1
+    )
+
+    ret out
+)
+
+FN cName(STR name) -> STR = (
+    out = ""
+    chars = name.ARR()
+
+    loop([chars])(
+        if(e == ".")(
+            out += "_"
+        ) else (
+            out += e
+        )
+    )
+
+    ret out
+)
+
+FN hasString(StringList items, STR item) -> BOL = (
+    loop([items])(
+        if(e == item)(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN sameString(STR left, STR right) -> BOL = (
+    ret left == right
+)
+
+FN isBuiltinType(STR typeName) -> BOL = (
+    ret typeName == "INT" || typeName == "FLT" || typeName == "BOL" || typeName == "STR" || typeName == "DYN" || typeName == "NUL"
+)
+
+FN canonicalTypeName(STR typeName, STR module) -> STR = (
+    if(typeName == "")(
+        ret ""
+    )
+
+    if(startsWith(typeName, "REF["))(
+        ret "REF[" + canonicalTypeName(stripRef(typeName), module) + "]"
+    )
+
+    if(startsWith(typeName, "ARR["))(
+        ret "ARR[" + canonicalTypeName(stripRef(typeName), module) + "]"
+    )
+
+    if(isBuiltinType(typeName) || hasDot(typeName) || isNativeType(typeName))(
+        ret typeName
+    )
+
+    if(module != "")(
+        ret module + "." + typeName
+    )
+
+    ret typeName
+)
+
+FN rememberString(REF[StringList] items, STR item) -> NUL = (
+    if(!hasString(items, item))(
+        *items.add(item)
+    )
+)
+
+FN copyStringList(StringList items) -> StringList = (
+    StringList out = emptyStringList()
+
+    loop([items])(
+        *out.add(e)
+    )
+
+    ret out
+)
+
+FN moduleName(STR module, STR name) -> STR = (
+    if(module == "")(
+        ret cName(name)
+    )
+
+    ret cName(module) + "_" + cName(name)
+)
+
+FN emptyFunctionTable() -> FunctionTable = (
+    ret {
+        functions = []
+    }
+)
+
+FN registerFunction(FunctionTable table, Ast.FnDecl item) -> FunctionTable = (
+    StringList params = emptyStringList()
+
+    loop([item.params])(
+        *params.add(canonicalTypeName(e.typeName, item.module))
+    )
+
+    ret table.upd({
+        functions = table.functions.add({
+            name = moduleName(item.module, item.name),
+            params = params,
+            returnType = canonicalTypeName(item.returnType, item.module)
+        })
+    })
+)
+
+FN buildFunctionTable(Ast.Program program) -> FunctionTable = (
+    FunctionTable table = emptyFunctionTable()
+
+    loop([program.functions])(
+        table = registerFunction(table, e)
+    )
+
+    ret table
+)
+
+FN functionArgType(FunctionTable table, STR name, INT index) -> STR = (
+    loop([table.functions])(
+        if(e.name == name && index >= 0 && index < len(e.params))(
+            ret e.params.index
+        )
+    )
+
+    ret ""
+)
+
+FN functionReturnType(FunctionTable table, STR name) -> STR = (
+    loop([table.functions])(
+        if(e.name == name)(
+            ret e.returnType
+        )
+    )
+
+    ret ""
+)
+
+FN arrayInnerName(STR typeName, STR module) -> STR = (
+    if(startsWith(typeName, "ARR["))(
+        ret arrayTypeName(typeName, module)
+    )
+
+    if(typeName == "INT" || typeName == "FLT" || typeName == "BOL" || typeName == "STR" || typeName == "DYN" || typeName == "NUL")(
+        ret cName(typeName)
+    )
+
+    if(hasDot(typeName) || isNativeType(typeName))(
+        ret cName(typeName)
+    )
+
+    if(module != "")(
+        ret moduleName(module, typeName)
+    )
+
+    ret cName(typeName)
+)
+
+FN arrayTypeName(STR typeName, STR module) -> STR = (
+    ret "ARR_" + arrayInnerName(stripRef(typeName), module)
+)
+
+FN hasDot(STR text) -> BOL = (
+    chars = text.ARR()
+
+    loop([chars])(
+        if(e == ".")(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN isNativeType(STR typeName) -> BOL = (
+    ret typeName == "BUF.Buffer" || typeName == "Buffer"
+)
+
+FN cTypeFor(STR typeName, STR module) -> STR = (
+    if(typeName == "NUL")(ret "void")
+    if(typeName == "INT")(ret "int64_t")
+    if(typeName == "FLT")(ret "double")
+    if(typeName == "BOL")(ret "bool")
+    if(typeName == "STR")(ret "FLX_STR")
+    if(typeName == "DYN")(ret "FLX_OBJ")
+    if(typeName == "BUF.Buffer" || typeName == "Buffer")(ret "Buffer")
+
+    if(startsWith(typeName, "REF["))(
+        ret cTypeFor(stripRef(typeName), module) + "*"
+    )
+
+    if(startsWith(typeName, "ARR["))(
+        ret arrayTypeName(typeName, module)
+    )
+
+    if(hasDot(typeName) || isNativeType(typeName))(
+        ret cName(typeName)
+    )
+
+    if(module != "")(
+        ret moduleName(module, typeName)
+    )
+
+    ret cName(typeName)
+)
+
+FN sameCType(STR left, STR right, STR module) -> BOL = (
+    ret sameString(cTypeFor(left, module), cTypeFor(right, module))
+)
+
+FN sameType(STR left, STR right, STR module) -> BOL = (
+    ret sameString(left, right) || sameCType(left, right, module)
+)
+
+FN recordFieldExpectedType(STR expectedType, STR fieldName, STR module) -> STR = (
+    STR expected = cTypeFor(expectedType, module)
+
+    if(expected == "Ast_Program")(
+        if(fieldName == "uses")(ret "Ast.UseDeclList")
+        if(fieldName == "types")(ret "Ast.TypeDeclList")
+        if(fieldName == "functions")(ret "Ast.FnDeclList")
+        if(fieldName == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    )
+
+    if(expected == "Ast_UseDecl")(
+        if(fieldName == "path")(ret "STR")
+        if(fieldName == "native")(ret "BOL")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_FieldDecl")(
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "typeName")(ret "STR")
+        if(fieldName == "initializer")(ret "STR")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_TypeDecl")(
+        if(fieldName == "kind")(ret "STR")
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "module")(ret "STR")
+        if(fieldName == "typeName")(ret "STR")
+        if(fieldName == "initializer")(ret "STR")
+        if(fieldName == "fields")(ret "Ast.FieldDeclList")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_ParamDecl")(
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "typeName")(ret "STR")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_Expr")(
+        if(fieldName == "kind")(ret "STR")
+        if(fieldName == "text")(ret "STR")
+        if(fieldName == "op")(ret "STR")
+        if(fieldName == "children")(ret "Ast.ExprList")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_Stmt")(
+        if(fieldName == "kind")(ret "STR")
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "typeName")(ret "STR")
+        if(fieldName == "op")(ret "STR")
+        if(fieldName == "value")(ret "Ast.Expr")
+        if(fieldName == "target")(ret "Ast.Expr")
+        if(fieldName == "condition")(ret "Ast.Expr")
+        if(fieldName == "source")(ret "Ast.Expr")
+        if(fieldName == "params")(ret "Ast.ParamDeclList")
+        if(fieldName == "body")(ret "Ast.StmtList")
+        if(fieldName == "elseBody")(ret "Ast.StmtList")
+        if(fieldName == "returnType")(ret "STR")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Ast_FnDecl")(
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "module")(ret "STR")
+        if(fieldName == "params")(ret "Ast.ParamDeclList")
+        if(fieldName == "returnType")(ret "STR")
+        if(fieldName == "body")(ret "STR")
+        if(fieldName == "bodyTokens")(ret "INT")
+        if(fieldName == "statements")(ret "Ast.StmtList")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Diagnostics_Diagnostic")(
+        if(fieldName == "file")(ret "STR")
+        if(fieldName == "line")(ret "INT")
+        if(fieldName == "col")(ret "INT")
+        if(fieldName == "endLine")(ret "INT")
+        if(fieldName == "endCol")(ret "INT")
+        if(fieldName == "severity")(ret "STR")
+        if(fieldName == "message")(ret "STR")
+    )
+
+    if(expected == "Source_SourceFile")(
+        if(fieldName == "path")(ret "STR")
+        if(fieldName == "text")(ret "STR")
+    )
+
+    if(expected == "Token_Span")(
+        if(fieldName == "line")(ret "INT")
+        if(fieldName == "col")(ret "INT")
+        if(fieldName == "endLine")(ret "INT")
+        if(fieldName == "endCol")(ret "INT")
+    )
+
+    if(expected == "Token_Token")(
+        if(fieldName == "kind")(ret "STR")
+        if(fieldName == "lexeme")(ret "STR")
+        if(fieldName == "span")(ret "Token.Span")
+    )
+
+    if(expected == "Feature_FeatureRule")(
+        if(fieldName == "area")(ret "STR")
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "token")(ret "STR")
+        if(fieldName == "role")(ret "STR")
+        if(fieldName == "opens")(ret "STR")
+        if(fieldName == "closes")(ret "STR")
+        if(fieldName == "summary")(ret "STR")
+    )
+
+    if(expected == "Feature_FeatureSet")(
+        if(fieldName == "rules")(ret "Feature.FeatureRules")
+    )
+
+    if(expected == "Names_FunctionSig")(
+        if(fieldName == "name")(ret "STR")
+        if(fieldName == "params")(ret "Names.StringList")
+        if(fieldName == "returnType")(ret "STR")
+    )
+
+    if(expected == "Names_FunctionTable")(
+        if(fieldName == "functions")(ret "Names.FunctionSigList")
+    )
+
+    if(expected == "Cursor_State")(
+        if(fieldName == "file")(ret "STR")
+        if(fieldName == "tokens")(ret "Token.TokenList")
+        if(fieldName == "pos")(ret "INT")
+        if(fieldName == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    )
+
+    if(expected == "Parser_ParseResult")(
+        if(fieldName == "tokens")(ret "Token.TokenList")
+        if(fieldName == "features")(ret "Feature.FeatureSet")
+        if(fieldName == "program")(ret "Ast.Program")
+        if(fieldName == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    )
+
+    if(expected == "Pipeline_TranspileResult")(
+        if(fieldName == "output")(ret "STR")
+        if(fieldName == "features")(ret "Feature.FeatureSet")
+        if(fieldName == "program")(ret "Ast.Program")
+        if(fieldName == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    )
+
+    if(expected == "Loader_LoadResult")(
+        if(fieldName == "program")(ret "Ast.Program")
+        if(fieldName == "loaded")(ret "Loader.StringList")
+        if(fieldName == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    )
+
+    ret ""
+)
+
+FN localArrayExpectedType(STR name, STR module) -> STR = (
+    if(name == "tokens")(ret "Token.TokenList")
+    if(name == "params")(ret "Ast.ParamDeclList")
+    if(name == "fields")(ret "Ast.FieldDeclList")
+    if(name == "items")(ret "Ast.ExprList")
+    if(name == "statements")(ret "Ast.StmtList")
+    if(name == "elseBody")(ret "Ast.StmtList")
+    if(name == "diagnostics")(ret "Diagnostics.DiagnosticList")
+    if(name == "rules")(ret "Feature.FeatureRules")
+
+    if(name == "loaded")(
+        if(module == "Loader")(ret "Loader.StringList")
+        ret "ARR[STR]"
+    )
+
+    ret ""
+)
+
+FN localType(StringList names, StringList types, STR name) -> STR = (
+    found = ""
+
+    loop([names])(
+        if(e == name)(
+            found = types.[i]
+        )
+    )
+
+    ret found
+)
+
+FN rememberLocal(REF[StringList] names, REF[StringList] types, STR name, STR typeName) -> NUL = (
+    if(localType(names, types, name) == "")(
+        *names.add(name)
+        *types.add(typeName)
+    )
+)
+
+FN shadowLocal(REF[StringList] names, REF[StringList] types, STR name, STR typeName) -> NUL = (
+    *names.add(name)
+    *types.add(typeName)
+)
+
+FN refTargetType(STR typeName) -> STR = (
+    if(startsWith(typeName, "REF["))(
+        ret stripRef(typeName)
+    )
+
+    ret typeName
+)
+
+FN isMethodCall(Ast.Expr item, STR method) -> BOL = (
+    if(item.kind != "call" || len(item.children) == 0)(
+        ret false
+    )
+
+    callee = item.children.0
+
+    if(callee.kind != "dot" || callee.text != method || len(callee.children) == 0)(
+        ret false
+    )
+
+    ret true
+)
+
+FN exprType(Ast.Expr item, StringList names, StringList types, STR module) -> STR = (
+    if(item.kind == "int")(ret "INT")
+    if(item.kind == "flt")(ret "FLT")
+    if(item.kind == "bol")(ret "BOL")
+    if(item.kind == "str")(ret "STR")
+    if(item.kind == "nul")(ret "NUL")
+
+    if(item.kind == "name")(
+        ret localType(names, types, item.text)
+    )
+
+    if(item.kind == "unary" && item.op == "*" && len(item.children) > 0)(
+        ret refTargetType(exprType(item.children.0, names, types, module))
+    )
+
+    if(item.kind == "unary" && item.op == "REF" && len(item.children) > 0)(
+        ret "REF[" + exprType(item.children.0, names, types, module) + "]"
+    )
+
+    if(item.kind == "dot" && len(item.children) > 0)(
+        STR baseType = refTargetType(exprType(item.children.0, names, types, module))
+
+        if(arrayElementForAlias(baseType, module) != "")(
+            ret arrayElementForAlias(baseType, module)
+        )
+
+        if(baseType == "STR")(
+            ret "STR"
+        )
+
+        ret recordFieldExpectedType(baseType, item.text, module)
+    )
+
+    if(item.kind == "index" && len(item.children) > 0)(
+        STR baseType = refTargetType(exprType(item.children.0, names, types, module))
+
+        if(baseType == "STR")(
+            ret "STR"
+        )
+
+        ret arrayElementForAlias(baseType, module)
+    )
+
+    if(item.kind == "binary" && len(item.children) > 1)(
+        STR leftType = exprType(item.children.0, names, types, module)
+        STR rightType = exprType(item.children.1, names, types, module)
+
+        if(item.op == "+" && (leftType == "STR" || rightType == "STR"))(
+            ret "STR"
+        )
+
+        if(item.op == "==" || item.op == "!=" || item.op == "<" || item.op == ">" || item.op == "<=" || item.op == ">=" || item.op == "&&" || item.op == "||")(
+            ret "BOL"
+        )
+
+        if(leftType == "FLT" || rightType == "FLT")(
+            ret "FLT"
+        )
+
+        ret leftType
+    )
+
+    if(item.kind == "call" && len(item.children) > 0)(
+        callee = item.children.0
+
+        if(callee.kind == "dot" && len(callee.children) > 0 && callee.children.0.kind == "name")(
+            owner = callee.children.0.text
+
+            if(owner == "PATH" && (callee.text == "name" || callee.text == "parent" || callee.text == "normalize" || callee.text == "join"))(
+                ret "STR"
+            )
+
+            if(owner == "FS" && callee.text == "read")(
+                ret "STR"
+            )
+
+            if(owner == "OS" && callee.text == "args")(
+                ret "ARR[STR]"
+            )
+
+            if(owner == "BUF" && callee.text == "new")(
+                ret "BUF.Buffer"
+            )
+
+            if(owner == "BUF" && callee.text == "toStr")(
+                ret "STR"
+            )
+
+            if(owner == "Diagnostics" && (callee.text == "formatDiagnostic" || callee.text == "diagnosticsJson" || callee.text == "diagnosticJson" || callee.text == "jsonEscape"))(
+                ret "STR"
+            )
+        )
+
+        if(isMethodCall(item, "add"))(
+            ret exprType(callee.children.0, names, types, module)
+        )
+
+        if(isMethodCall(item, "upd"))(
+            ret exprType(callee.children.0, names, types, module)
+        )
+
+        if(callee.kind == "dot" && callee.text == "ARR" && len(callee.children) > 0 && exprType(callee.children.0, names, types, module) == "STR")(
+            ret "ARR[STR]"
+        )
+
+        if(callee.kind == "name" && (callee.text == "STR" || callee.text == "upper" || callee.text == "lower" || callee.text == "trim" || callee.text == "replace"))(
+            ret "STR"
+        )
+
+        if(callee.kind == "name" && (callee.text == "formatDiagnostic" || callee.text == "diagnosticsJson" || callee.text == "diagnosticJson" || callee.text == "jsonEscape" || callee.text == "Diagnostics_formatDiagnostic" || callee.text == "Diagnostics_diagnosticsJson" || callee.text == "Diagnostics_diagnosticJson" || callee.text == "Diagnostics_jsonEscape"))(
+            ret "STR"
+        )
+
+        if(callee.kind == "name" && callee.text == "len")(
+            ret "INT"
+        )
+    )
+
+    ret ""
+)
+
+FN arrayElementForAlias(STR arrayType, STR module) -> STR = (
+    STR normalized = cTypeFor(arrayType, module)
+
+    if(startsWith(arrayType, "ARR["))(
+        ret stripRef(arrayType)
+    )
+
+    if(normalized == "Ast_UseDeclList")(ret "Ast.UseDecl")
+    if(normalized == "Ast_FieldDeclList")(ret "Ast.FieldDecl")
+    if(normalized == "Ast_TypeDeclList")(ret "Ast.TypeDecl")
+    if(normalized == "Ast_ParamDeclList")(ret "Ast.ParamDecl")
+    if(normalized == "Ast_ExprList")(ret "Ast.Expr")
+    if(normalized == "Ast_StmtList")(ret "Ast.Stmt")
+    if(normalized == "Ast_FnDeclList")(ret "Ast.FnDecl")
+    if(normalized == "Diagnostics_DiagnosticList")(ret "Diagnostics.Diagnostic")
+    if(normalized == "Token_TokenList")(ret "Token.Token")
+    if(normalized == "Feature_FeatureRules")(ret "Feature.FeatureRule")
+    if(normalized == "Names_StringList")(ret "STR")
+    if(normalized == "Names_FunctionSigList")(ret "Names.FunctionSig")
+    if(normalized == "Loader_StringList")(ret "STR")
+
+    ret ""
+)
+
+FN arrayAddFnName(STR arrayType, STR module) -> STR = (
+    ret cTypeFor(arrayType, module) + "_add"
+)

@@ -1,0 +1,35 @@
+use WEB
+// use WEB imports the WEB functions plus the WEB.Req, WEB.Res, and WebApp
+// type names used by handlers and route registration.
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 8080
+    })
+
+    WEB.get(REF app, "/health", [], health)
+    WEB.get(REF app, "/accounts/:id", [], getAccount)
+    WEB.post(REF app, "/accounts/:id/transfers", [], postTransfer)
+
+    WEB.listen(REF app)
+)
+
+FN health(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.text("ok")
+)
+
+FN getAccount(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        id = req.params.id,
+        name = "Ada"
+    })
+)
+
+FN postTransfer(REF[WEB.Req] req) -> WEB.Res = (
+    body = JSON(req.body)
+
+    ret WEB.json({
+        account = req.params.id,
+        amount = body.amount else 0
+    }, 201)
+)

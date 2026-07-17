@@ -1,0 +1,398 @@
+// WEB.cast
+//
+// Express-like routing layer built in Caster on top of REQ.host.
+//
+// Core REQ.host stays small:
+// - bind port
+// - accept requests
+// - call one top-level dispatch handler
+// - hold server/runtime
+//
+// WEB.listen uses the stateful host form:
+//
+//     REQ.host(app.config.port, app, dispatch)
+//
+// The host stores the exact app reference and calls dispatch with that
+// reference plus each request. There is no WEB_ACTIVE_APP locker/global.
+//
+// WEB adds:
+// - app value
+// - explicit REF mutation for route registration
+// - route table
+// - path params
+// - JSON helpers
+// - get/post/put/delete registration
+// - dispatch
+
+
+// ========================
+// TYPES
+// ========================
+
+MAP[STR, STR] Headers = {}
+MAP[STR, STR] Params = {}
+MAP[STR, STR] Query = {}
+MAP[STR, STR] Ctx = {}
+ARR[STR] PathParts = []
+
+MAP HttpRes = {
+    INT status = 200,
+    STR body = "",
+    Headers headers = INIT
+}
+
+MAP HttpReq = {
+    STR method = "GET",
+    STR path = "",
+    STR body = "",
+    Headers headers = INIT,
+    Params params = INIT,
+    Query query = INIT,
+    Ctx ctx = INIT,
+    HttpRes res = INIT
+}
+
+TYPE Middleware = FN[REF[Req] -> BOL]
+TYPE Handler = FN[REF[Req] -> Res]
+ARR[Middleware] MiddlewareList = []
+
+MAP HostConfig = {
+    STR host = "0.0.0.0",
+    INT port = 8080
+}
+
+MAP Route = {
+    STR method = "",
+    STR pattern = "",
+    PathParts parts = INIT,
+    MiddlewareList middleware = INIT,
+    Handler handler = NUL
+}
+
+MAP WebApp = {
+    HostConfig config = INIT,
+    ARR[Route] routes = []
+}
+
+// ========================
+// RESPONSE HELPERS
+// ========================
+
+FN text(STR body) -> Res = (
+    ret {
+        status = 200,
+        body = body + "",
+        headers = {
+            "content-type" = "text/plain"
+        }
+    }
+)
+
+FN html(STR body) -> Res = (
+    ret {
+        status = 200,
+        body = body + "",
+        headers = {
+            "content-type" = "text/html"
+        }
+    }
+)
+
+FN json(DYN value, INT status) -> Res = (
+    ret {
+        status = status,
+        body = JSON.stringify(value),
+        headers = {
+            "content-type" = "application/json"
+        }
+    }
+)
+
+FN error(STR message, INT status) -> Res = (
+    ret {
+        status = status,
+        body = message + "",
+        headers = {
+            "content-type" = "text/plain"
+        }
+    }
+)
+
+FN notFound() -> Res = (
+    ret error("not found", 404)
+)
+
+FN methodNotAllowed() -> Res = (
+    ret error("method not allowed", 405)
+)
+
+
+// ========================
+// APP CREATION
+// ========================
+
+FN app(HostConfig config) -> WebApp = (
+    ret {
+        config = config,
+        routes = []
+    }
+)
+
+FN defaultApp() -> WebApp = (
+    ret app(HostConfig)
+)
+
+
+// ========================
+// ROUTE REGISTRATION
+// ========================
+//
+// Registration mutates the app, so callers must pass REF app.
+// This keeps route-table mutation visible at the call site.
+
+FN route(
+    REF[WebApp] app,
+    STR method,
+    STR pattern,
+    MiddlewareList middleware,
+    Handler handler
+) -> NUL = (
+    *app.routes.add({
+        method = method,
+        pattern = pattern,
+        parts = pathParts(pattern),
+        middleware = middleware,
+        handler = handler
+    })
+)
+
+FN get(REF[WebApp] app, STR pattern, MiddlewareList middleware, Handler handler) -> NUL = (
+    route(app, "GET", pattern, middleware, handler)
+)
+
+FN post(REF[WebApp] app, STR pattern, MiddlewareList middleware, Handler handler) -> NUL = (
+    route(app, "POST", pattern, middleware, handler)
+)
+
+FN put(REF[WebApp] app, STR pattern, MiddlewareList middleware, Handler handler) -> NUL = (
+    route(app, "PUT", pattern, middleware, handler)
+)
+
+FN delete(REF[WebApp] app, STR pattern, MiddlewareList middleware, Handler handler) -> NUL = (
+    route(app, "DELETE", pattern, middleware, handler)
+)
+// For external use, this file is imported as WEB and its functions are
+// exposed as WEB.get, WEB.post, WEB.put, and WEB.delete.
+
+
+// ========================
+// PATH MATCHING
+// ========================
+//
+// Supports:
+//
+//     /accounts/:id
+//     /accounts/:id/transfers
+//
+// Pattern segment beginning with ":" captures a param.
+
+FN isParam(STR part) -> BOL = (
+    ret len(part) > 0 && part.0 == ":"
+)
+
+FN paramName(STR part) -> STR = (
+    ret part.filt(i > 0)
+)
+
+FN cleanPath(STR path) -> STR = (
+    if(path == "")(
+        ret "/"
+    )
+
+    ret path
+)
+
+FN pathParts(STR path) -> ARR[STR] = (
+    clean = cleanPath(path)
+
+    if(clean == "/")(
+        ret []
+    )
+
+    parts = ARR(clean, "/")
+
+    ret parts.filt(e != "")
+)
+
+FN pathOnly(STR path) -> STR = (
+    pos = find(path, "?")
+
+    if(pos < 0)(
+        ret path
+    )
+
+    ret path.filt(i < pos)
+)
+
+FN queryText(STR path) -> STR = (
+    pos = find(path, "?")
+
+    if(pos < 0)(
+        ret ""
+    )
+
+    ret path.filt(i > pos)
+)
+
+FN parseQuery(STR path) -> Query = (
+    raw = queryText(path)
+    query = Query.INIT()
+
+    if(raw == "")(
+        ret query
+    )
+
+    pairs = ARR(raw, "&")
+
+    loop([pairs])(
+        if(e != "")(
+            parts = ARR(e, "=")
+
+            if(len(parts) == 1)(
+                query = {query} + {
+                    [urlDecode(parts.0)] = ""
+                }
+            )else(
+                query = {query} + {
+                    [urlDecode(parts.0)] = urlDecode(parts.1)
+                }
+            )
+        )
+    )
+
+    ret query
+)
+
+FN partsMatch(PathParts patternParts, PathParts actualParts) -> BOL = (
+    if(len(patternParts) != len(actualParts))(
+        ret false
+    )
+
+    loop([patternParts])(
+        if(!isParam(e))(
+            if(e != actualParts.i)(
+                ret false
+            )
+        )
+    )
+
+    ret true
+)
+
+FN fillParams(PathParts patternParts, PathParts actualParts, REF[Params] params) -> NUL = (
+    loop([patternParts])(
+        if(isParam(e))(
+            *params + {
+                [paramName(e)] = urlDecode(actualParts.i)
+            }
+        )
+    )
+)
+
+FN matchParts(PathParts patternParts, PathParts actualParts, REF[Params] params) -> BOL = (
+    if(!partsMatch(patternParts, actualParts))(
+        ret false
+    )
+
+    fillParams(patternParts, actualParts, params)
+    ret true
+)
+
+FN matchPath(STR pattern, STR path, REF[Params] params) -> BOL = (
+    ret matchParts(pathParts(pattern), pathParts(path), params)
+)
+
+
+// ========================
+// REQUEST AUGMENTATION
+// ========================
+
+FN applyRouteData(REF[Req] req, STR path, Params params, Query query) -> NUL = (
+    *req.path = path
+    *req.params = params
+    *req.query = query
+)
+
+FN applyRouteDataNoQuery(REF[Req] req, STR path, Params params) -> NUL = (
+    *req.path = path
+    *req.params = params
+)
+
+
+// ========================
+// DISPATCH
+// ========================
+//
+// Dispatch receives REF[WebApp] so REQ.host can pass state without closures.
+// The app itself is not mutated during dispatch.
+
+FN dispatchRef(REF[WebApp] app, REF[Req] req) -> Res = (
+    foundPath = false
+    originalPath = req.path
+    routePath = pathOnly(originalPath)
+    actualParts = pathParts(routePath)
+
+    loop([app.routes])(
+        if(partsMatch(e.parts, actualParts))(
+            if(e.method == req.method)(
+                params = Params.INIT()
+                fillParams(e.parts, actualParts, REF params)
+
+                if(find(originalPath, "?") >= 0)(
+                    query = parseQuery(originalPath)
+                    applyRouteData(req, routePath, params, query)
+                )else(
+                    applyRouteDataNoQuery(req, routePath, params)
+                )
+
+                loop([e.middleware])(
+                    if(!e(req))(
+                        res = req.res
+                        *req.res = HttpRes.INIT()
+                        ret res
+                    )
+                )
+
+                ret e.handler(req)
+            )
+
+            foundPath = true
+        )
+    )
+
+    if(foundPath)(
+        ret methodNotAllowed()
+    )
+
+    ret notFound()
+)
+
+FN dispatch(REF[WebApp] app, Req req) -> Res = (
+    ret dispatchRef(app, REF req)
+)
+
+
+// ========================
+// LISTEN
+// ========================
+//
+// REQ.host accepts an explicit REF context plus a top-level handler here, so
+// WEB.listen does not need hidden global app mutation.
+
+FN listen(REF[WebApp] app) -> NUL = (
+    REQ.host(app.config.port, app, dispatchRef)
+)
+
+FN listenTLS(REF[WebApp] app, STR certFile, STR keyFile) -> NUL = (
+    REQ.hostTLS(app.config.port, certFile, keyFile, app, dispatchRef)
+)

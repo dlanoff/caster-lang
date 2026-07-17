@@ -1,0 +1,72 @@
+<svg width="860" height="932" viewBox="0 0 860 932" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">MAP declaration, updates, and loops</title>
+  <desc id="desc">Syntax highlighted code block: MAP declaration, updates, and loops.</desc>
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7457d9"/>
+      <stop offset="0.55" stop-color="#1f7bd6"/>
+      <stop offset="1" stop-color="#a87924"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .base { font: 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #e8eef7; }
+      .title { font: 700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #8ca3b8; letter-spacing: .04em; }
+      .kw { fill: #ff5f6d; font-weight: 700; }
+      .fn { fill: #c792ea; }
+      .blue { fill: #4da3ff; }
+      .type { fill: #9dd6ff; }
+      .num { fill: #9dd6ff; }
+      .loop { fill: #ffe49c; }
+      .str { fill: #f6c177; }
+      .op { fill: #95a7bd; }
+      .comment { fill: #8ca3b8; font-style: italic; }
+      .base-fill { fill: #e8eef7; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="858" height="930" rx="14" fill="url(#rim)" opacity="0.86"/>
+  <rect x="3" y="3" width="854" height="926" rx="13" fill="#0f1420"/>
+  <path d="M18 61 C155 25 258 82 378 58 C516 25 619 92 722 58 C783 40 826 46 842 64" fill="none" stroke="#7457d9" stroke-width="1.25" opacity="0.38" filter="url(#glow)"/>
+  <circle cx="29" cy="29" r="5.5" fill="#ff5f6d"/>
+  <circle cx="50" cy="29" r="5.5" fill="#f6c177"/>
+  <circle cx="71" cy="29" r="5.5" fill="#4da3ff"/>
+  <text class="title" x="776" y="34">CASTER</text>
+  <text class="title" x="804" y="60" fill="#f6c177">*</text>
+  <text class="base" xml:space="preserve" x="36" y="78"><tspan class="type">MAP</tspan> <tspan class="base-fill">User</tspan> <tspan class="op">=</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="104">    <tspan class="type">STR</tspan> <tspan class="base-fill">name</tspan> <tspan class="op">=</tspan> <tspan class="str">""</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="130">    <tspan class="type">INT</tspan> <tspan class="base-fill">age</tspan> <tspan class="op">=</tspan> <tspan class="num">0</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="156">}</text>
+  <text class="base" xml:space="preserve" x="36" y="182"></text>
+  <text class="base" xml:space="preserve" x="36" y="208"><tspan class="type">MAP</tspan>[<tspan class="type">STR</tspan>, <tspan class="type">INT</tspan>] <tspan class="base-fill">Scores</tspan> <tspan class="op">=</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="234">    <tspan class="str">"math"</tspan> <tspan class="op">=</tspan> <tspan class="num">95</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="260">    <tspan class="str">"science"</tspan> <tspan class="op">=</tspan> <tspan class="num">88</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="286">}</text>
+  <text class="base" xml:space="preserve" x="36" y="312"></text>
+  <text class="base" xml:space="preserve" x="36" y="338"><tspan class="kw">FN</tspan> <tspan class="fn">mapTour</tspan>() <tspan class="op">-&gt;</tspan> <tspan class="type">INT</tspan> <tspan class="op">=</tspan> (</text>
+  <text class="base" xml:space="preserve" x="36" y="364">    <tspan class="base-fill">user</tspan> <tspan class="op">=</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="390">        <tspan class="base-fill">name</tspan> <tspan class="op">=</tspan> <tspan class="str">"Ada"</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="416">        <tspan class="base-fill">age</tspan> <tspan class="op">=</tspan> <tspan class="num">37</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="442">    }</text>
+  <text class="base" xml:space="preserve" x="36" y="468"></text>
+  <text class="base" xml:space="preserve" x="36" y="494">    <tspan class="base-fill">scores</tspan> <tspan class="op">=</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="520">        <tspan class="str">"math"</tspan> <tspan class="op">=</tspan> <tspan class="num">95</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="546">        <tspan class="str">"science"</tspan> <tspan class="op">=</tspan> <tspan class="num">88</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="572">    }</text>
+  <text class="base" xml:space="preserve" x="36" y="598">    <tspan class="base-fill">scores</tspan> <tspan class="op">=</tspan> {<tspan class="base-fill">scores</tspan>} <tspan class="op">+</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="624">        <tspan class="str">"history"</tspan> <tspan class="op">=</tspan> <tspan class="num">92</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="650">    }</text>
+  <text class="base" xml:space="preserve" x="36" y="676"></text>
+  <text class="base" xml:space="preserve" x="36" y="702">    <tspan class="base-fill">total</tspan> <tspan class="op">=</tspan> <tspan class="num">0</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="728">    <tspan class="kw">loop</tspan>({<tspan class="base-fill">scores</tspan>})(</text>
+  <text class="base" xml:space="preserve" x="36" y="754">        <tspan class="fn">log</tspan>(<tspan class="loop">e</tspan>, <tspan class="loop">val</tspan>) <tspan class="comment">// "math" 95, ...</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="780">        <tspan class="base-fill">total</tspan> <tspan class="op">+=</tspan> <tspan class="loop">val</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="806">    )</text>
+  <text class="base" xml:space="preserve" x="36" y="832"></text>
+  <text class="base" xml:space="preserve" x="36" y="858">    <tspan class="kw">ret</tspan> <tspan class="base-fill">total</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="884">)</text>
+</svg>

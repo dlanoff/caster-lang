@@ -1,0 +1,21 @@
+use ./feature
+
+FN register(Feature.FeatureSet features) -> Feature.FeatureSet = (
+    features = Feature.addRule(features, Feature.openDelimiter(
+        "MAP",
+        "open",
+        "LBRACE",
+        "RBRACE",
+        "MAP literals, field overlays, and block-like records all begin from brace syntax"
+    ))
+
+    features = Feature.addRule(features, Feature.closeDelimiter(
+        "MAP",
+        "close",
+        "RBRACE",
+        "LBRACE",
+        "MAP and record parsing must prove braces are balanced before feature-specific field parsing runs"
+    ))
+
+    ret features
+)

@@ -1,0 +1,18 @@
+use REQ
+
+FN main() -> NUL = (
+    postTask = REQ.post("http://127.0.0.1:8001/echo", `{"name":"Ada"}`)
+    putTask = REQ.put("http://127.0.0.1:8001/echo", `{"age":42}`)
+    deleteTask = REQ.delete("http://127.0.0.1:8001/echo")
+
+    results = hold [postTask, putTask, deleteTask]
+
+    assert(results.0.status == 200, "REQ.post status")
+    assert(results.0.body == `{"method": "POST", "body": {"name": "Ada"}}`, "REQ.post body")
+
+    assert(results.1.status == 200, "REQ.put status")
+    assert(results.1.body == `{"method": "PUT", "body": {"age": 42}}`, "REQ.put body")
+
+    assert(results.2.status == 200, "REQ.delete status")
+    assert(results.2.body == `{"method": "DELETE", "body": ""}`, "REQ.delete body")
+)

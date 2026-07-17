@@ -1,0 +1,370 @@
+ARR[MAP] Sales = [{
+    STR sku = "",
+    INT price = 0,
+    INT qty = 0,
+    BOL active = true
+}]
+
+MAP[STR, INT] ScoreMap = {}
+
+ARR[MAP] SalesRegions = [{
+    INT currencyRate = 1,
+    ARR[MAP] stores = [{
+        INT taxRate = 1,
+        ARR[MAP] sales = [{
+            INT amount = 0
+        }]
+    }]
+}]
+
+MAP RevenuePayload = {
+    ARR[MAP] regions = [{
+        STR name = "",
+        FLT currencyRate = 1.0,
+        FLT operatingCost = 0.0,
+        ARR[MAP] stores = [{
+            STR name = "",
+            BOL active = false,
+            FLT taxRate = 1.0,
+            FLT processingFee = 0.0,
+            ARR[MAP] sales = [{
+                FLT amount = 0.0,
+                FLT discount = 0.0,
+                BOL completed = false,
+                BOL refunded = false
+            }]
+        }]
+    }]
+}
+
+MAP LabelRow = {
+    STR label = "",
+    INT count = 0
+}
+
+FN decodeRevenuePayload(DYN data) -> RevenuePayload = (
+    ret data
+)
+
+ARR[MAP] Orders = [{
+    STR customer = "",
+    STR region = "",
+    STR status = "",
+    ARR[MAP] items = [{
+        INT price = 0,
+        INT qty = 0,
+        INT cost = 0
+    }]
+}]
+
+FN testStringCoerceChainRejoin() -> BOL = (
+    text = "caster 2026"
+    chars = text.ARR().filt(e != " ").upd(
+        if(isDigit(e))(
+            "#"
+        ) else(
+            upper(e)
+        )
+    )
+
+    text = chars.STR()
+
+    ret text == "CASTER####"
+)
+
+FN testStringPipelineCopyComposition() -> BOL = (
+    text = " Caster, 2026! "
+    clean = text.ARR().filt(isAlpha(e)).upd(lower(e)).STR()
+
+    ret clean == "caster"
+)
+
+FN testStringDelimiterCoercion() -> BOL = (
+    row = "red,green,blue"
+    parts = row.ARR(",")
+    joined = parts.STR("|")
+
+    ret parts.len() == 3 && parts.0 == "red" && parts.1 == "green" && parts.2 == "blue" && joined == "red|green|blue"
+)
+
+FN testMapArrWrap() -> BOL = (
+    row = LabelRow.INIT().upd({
+        label = "total",
+        count = 2
+    })
+    rows = row.ARR()
+
+    ret rows.len() == 1 && rows.0.label == "total" && rows.0.count == 2
+)
+
+FN testNumberPipelineComposition() -> BOL = (
+    values = [4, -2, 7, 0, 10].filt(e > 0).upd(e * 3)
+
+    ret values.len() == 3 && values.0 == 12 && values.1 == 21 && values.2 == 30 && values.agg( += e ) == 63
+)
+
+FN testSalesPipelineComposition() -> BOL = (
+    sales = Sales.INIT()
+    *sales.add({ sku = "book", price = 12, qty = 2, active = true })
+    *sales.add({ sku = "pen", price = 3, qty = 5, active = true })
+    *sales.add({ sku = "mug", price = 9, qty = 1, active = false })
+    *sales.add({ sku = "bag", price = 40, qty = 1, active = true })
+
+    activeRevenue = sales.filt(e.active).upd(e.price * e.qty).agg( += e )
+    expensiveActiveCount = sales.filt(e.active).agg( += 1 if(e.price >= 10) )
+
+    ret activeRevenue == 79 && expensiveActiveCount == 2
+)
+
+FN testMapAggDataSummary() -> BOL = (
+    scores = ScoreMap.INIT()
+    scores = scores.upd({
+        "math" = 90,
+        "science" = 95,
+        "art" = 80
+    })
+
+    total = scores.agg( += val )
+    highCount = scores.agg( += 1 if(val >= 90) )
+    nonScienceTotal = scores.agg( += val if(e != "science") )
+
+    ret total == 265 && highCount == 2 && nonScienceTotal == 170
+)
+
+FN testNamedNestedAgg() -> BOL = (
+    regions = SalesRegions.INIT()
+    *regions.add({
+        currencyRate = 5,
+        stores = [
+            {
+                taxRate = 2,
+                sales = [
+                    { amount = 10 },
+                    { amount = 20 }
+                ]
+            },
+            {
+                taxRate = 3,
+                sales = [
+                    { amount = 5 }
+                ]
+            }
+        ]
+    })
+    *regions.add({
+        currencyRate = 6,
+        stores = [
+            {
+                taxRate = 4,
+                sales = [
+                    { amount = 7 }
+                ]
+            }
+        ]
+    })
+
+    total = regions.agg(
+        += .stores.agg(
+            += .sales.agg(
+                += .amount * store.taxRate * region.currencyRate
+            )
+        )
+    )
+
+    ret total == 543
+)
+
+FN testCanonicalJsonAggRevenue() -> BOL = (
+    data = JSON(`{
+  "regions": [
+    {
+      "name": "East",
+      "currencyRate": 1.0,
+      "operatingCost": 100,
+      "stores": [
+        {
+          "name": "East Shop",
+          "active": true,
+          "taxRate": 1.1,
+          "processingFee": 20,
+          "sales": [
+            {
+              "amount": 200,
+              "discount": 20,
+              "completed": true,
+              "refunded": false
+            },
+            {
+              "amount": 100,
+              "discount": 0,
+              "completed": true,
+              "refunded": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "West",
+      "currencyRate": 0.8,
+      "operatingCost": 50,
+      "stores": [
+        {
+          "name": "West Shop",
+          "active": true,
+          "taxRate": 1.05,
+          "processingFee": 10,
+          "sales": [
+            {
+              "amount": 300,
+              "discount": 50,
+              "completed": true,
+              "refunded": false
+            },
+            {
+              "amount": 80,
+              "discount": 0,
+              "completed": false,
+              "refunded": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`)
+    RevenuePayload payload = decodeRevenuePayload(data)
+
+    netRevenue = payload.regions.agg(
+        += .stores.agg(
+            += .sales.agg(
+                += if(.completed && !.refunded)(
+                    (.amount - .discount)
+                        * store.taxRate
+                        * region.currencyRate
+                )
+            )
+            - if(.sales.any(.completed && !.refunded))(
+                store.processingFee
+            )
+        )
+        - .operatingCost
+    )
+
+    ret netRevenue > 227.9 && netRevenue < 228.1
+)
+
+FN makeOrders() -> Orders = (
+    orders = Orders.INIT()
+    *orders.add({
+        customer = "Ada",
+        region = "north",
+        status = "PAID",
+        items = [
+            { price = 10, qty = 2, cost = 4 },
+            { price = 5, qty = 1, cost = 2 }
+        ]
+    })
+    *orders.add({
+        customer = "Grace",
+        region = "west",
+        status = "PENDING",
+        items = [
+            { price = 50, qty = 1, cost = 45 }
+        ]
+    })
+    *orders.add({
+        customer = "Bob",
+        region = "south",
+        status = "SHIPPED",
+        items = [
+            { price = 15, qty = 2, cost = 3 }
+        ]
+    })
+
+    ret orders
+)
+
+FN testInferredAliasTapPipeline() -> BOL = (
+    totalRevenue = 0
+    averageRevenue = 0
+    Orders orders = makeOrders()
+
+    report = orders
+        .filt(
+            order.status IS "PAID" || "SHIPPED"
+        )
+        .upd({
+            customer = order.customer,
+            revenue = order.items.agg(
+                += item.price * item.qty
+            ),
+            cost = order.items.agg(
+                += item.cost * item.qty
+            )
+        })
+        .tap(rows)(
+            totalRevenue = rows.agg(
+                += e.revenue
+            )
+            averageRevenue = totalRevenue / rows.len()
+        )
+        .filt(
+            e.revenue >= averageRevenue
+        )
+        .upd({
+            customer = e.customer,
+            revenue = e.revenue,
+            share = e.revenue / totalRevenue
+        })
+
+    ret totalRevenue == 55 && averageRevenue == 27 && report.len() == 1 && report.0.customer == "Bob" && report.0.revenue == 30
+)
+
+FN testGroupSortPipeline() -> BOL = (
+    Orders orders = makeOrders()
+
+    report = orders
+        .filt(
+            order.status IS "PAID" || "SHIPPED"
+        )
+        .upd({
+            customer = order.customer,
+            region = order.region,
+            revenue = order.items.agg(
+                += item.price * item.qty
+            ),
+            cost = order.items.agg(
+                += item.cost * item.qty
+            )
+        })
+        .group(e.customer)
+        .upd({
+            customer = customer.key,
+            region = customer.val.0.region,
+            revenue = customer.val.agg(
+                += e.revenue
+            ),
+            margin = customer.val.agg(
+                += e.revenue - e.cost
+            ),
+            orders = customer.val.len()
+        })
+        .ARR()
+        .filt(e.margin > 0)
+        .sort(e.margin DESC)
+
+    ret report.len() == 2 && report.0.customer == "Bob" && report.0.margin == 24 && report.1.customer == "Ada" && report.1.margin == 15
+)
+
+assert(testStringCoerceChainRejoin(), "string coerce chain rejoin")
+assert(testStringPipelineCopyComposition(), "string pipeline copy composition")
+assert(testStringDelimiterCoercion(), "string delimiter coercion")
+assert(testMapArrWrap(), "map ARR wrap")
+assert(testNumberPipelineComposition(), "number pipeline composition")
+assert(testSalesPipelineComposition(), "sales pipeline composition")
+assert(testMapAggDataSummary(), "map agg data summary")
+assert(testNamedNestedAgg(), "named nested agg")
+assert(testCanonicalJsonAggRevenue(), "canonical JSON agg revenue")
+assert(testInferredAliasTapPipeline(), "inferred alias tap pipeline")
+assert(testGroupSortPipeline(), "group sort pipeline")

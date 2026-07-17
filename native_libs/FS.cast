@@ -1,0 +1,4 @@
+// FS native adapter.
+//
+// Functions are provided by src/caster/adapters/sys.c and exposed as FS.*.
+// FileStat is a compiler-known adapter result type.

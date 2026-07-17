@@ -1,0 +1,69 @@
+MAP FeatureRule = {
+    STR area = "",
+    STR name = "",
+    STR token = "",
+    STR role = "",
+    STR opens = "",
+    STR closes = "",
+    STR summary = ""
+}
+
+ARR[FeatureRule] FeatureRules = []
+
+MAP FeatureSet = {
+    FeatureRules rules = INIT
+}
+
+FN empty() -> FeatureSet = (
+    ret {
+        rules = []
+    }
+)
+
+FN addRule(FeatureSet features, FeatureRule rule) -> FeatureSet = (
+    ret {
+        rules = features.rules.add(rule)
+    }
+)
+
+FN openDelimiter(STR area, STR name, STR token, STR closes, STR summary) -> FeatureRule = (
+    ret {
+        area = area,
+        name = name,
+        token = token,
+        role = "openDelimiter",
+        closes = closes,
+        summary = summary
+    }
+)
+
+FN closeDelimiter(STR area, STR name, STR token, STR opens, STR summary) -> FeatureRule = (
+    ret {
+        area = area,
+        name = name,
+        token = token,
+        role = "closeDelimiter",
+        opens = opens,
+        summary = summary
+    }
+)
+
+FN delimiterDelta(FeatureSet features, STR token) -> INT = (
+    delta = 0
+
+    loop([features.rules])(
+        if(e.token == token)(
+            if(e.role == "openDelimiter")(
+                delta = 1
+            ) elx(e.role == "closeDelimiter")(
+                delta = -1
+            )
+        )
+    )
+
+    ret delta
+)
+
+FN describe(FeatureRule rule) -> STR = (
+    ret rule.area + "." + rule.name + " owns " + rule.token + " because " + rule.summary
+)

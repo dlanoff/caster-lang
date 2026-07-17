@@ -1,0 +1,97 @@
+use ./../driver/diagnostics
+use ./../lex/token
+
+MAP State = {
+    STR file = "",
+    Token.TokenList tokens = [],
+    INT pos = 0,
+    Diagnostics.DiagnosticList diagnostics = []
+}
+
+FN new(STR file, Token.TokenList tokens) -> State = (
+    ret {
+        file = file,
+        tokens = tokens,
+        pos = 0,
+        diagnostics = []
+    }
+)
+
+FN current(REF[State] state) -> Token.Token = (
+    if(state.pos < len(state.tokens))(
+        ret state.tokens.[state.pos]
+    )
+
+    last = len(state.tokens) - 1
+    ret state.tokens.[last]
+)
+
+FN peek(REF[State] state, INT offset) -> Token.Token = (
+    idx = state.pos + offset
+
+    if(idx < len(state.tokens))(
+        ret state.tokens.[idx]
+    )
+
+    last = len(state.tokens) - 1
+    ret state.tokens.[last]
+)
+
+FN at(REF[State] state, STR kind) -> BOL = (
+    Token.Token tok = current(state)
+    ret tok.kind == kind
+)
+
+FN peekAt(REF[State] state, INT offset, STR kind) -> BOL = (
+    Token.Token tok = peek(state, offset)
+    ret tok.kind == kind
+)
+
+FN advance(REF[State] state) -> Token.Token = (
+    Token.Token tok = current(state)
+
+    if(state.pos < len(state.tokens))(
+        *state.pos += 1
+    )
+
+    ret tok
+)
+
+FN match(REF[State] state, STR kind) -> BOL = (
+    if(at(state, kind))(
+        advance(state)
+        ret true
+    )
+
+    ret false
+)
+
+FN addError(REF[State] state, Token.Token tok, STR message) -> NUL = (
+    *state.diagnostics.add(Diagnostics.diagnostic(state.file, tok.span.line, tok.span.col, tok.span.endLine, tok.span.endCol, "error", message))
+)
+
+FN expect(REF[State] state, STR kind, STR message) -> Token.Token = (
+    Token.Token tok = current(state)
+
+    if(tok.kind == kind)(
+        ret advance(state)
+    )
+
+    addError(state, tok, message)
+
+    if(tok.kind != "EOF")(
+        advance(state)
+    )
+
+    ret tok
+)
+
+FN skipNewlines(REF[State] state) -> NUL = (
+    loop(at(state, "NEWLINE"))(
+        advance(state)
+    )
+)
+
+FN atEnd(REF[State] state) -> BOL = (
+    ret at(state, "EOF")
+)

@@ -1,0 +1,239 @@
+use ./../driver/source
+use ./token
+
+FN isIdentStart(STR ch) -> BOL = (
+    ret isAlpha(ch) || ch == "_"
+)
+
+FN isIdentContinue(STR ch) -> BOL = (
+    ret isIdentStart(ch) || isDigit(ch)
+)
+
+FN keywordKind(STR word) -> STR = (
+    if(word == "FN")(ret "FN")
+    if(word == "TYPE")(ret "TYPE")
+    if(word == "MAP")(ret "MAP")
+    if(word == "ARR")(ret "ARR")
+    if(word == "REF")(ret "REF")
+    if(word == "TSK")(ret "TSK")
+    if(word == "INIT")(ret "INIT")
+    if(word == "INT")(ret "INT_TYPE")
+    if(word == "FLT")(ret "FLT_TYPE")
+    if(word == "BOL")(ret "BOL_TYPE")
+    if(word == "STR")(ret "STR_TYPE")
+    if(word == "NUL")(ret "NUL")
+    if(word == "DYN")(ret "DYN_TYPE")
+    if(word == "ret")(ret "RET")
+    if(word == "if")(ret "IF")
+    if(word == "elx")(ret "ELX")
+    if(word == "else")(ret "ELSE")
+    if(word == "loop")(ret "LOOP")
+    if(word == "pass")(ret "PASS")
+    if(word == "throw")(ret "THROW")
+    if(word == "use")(ret "USE")
+    if(word == "FREE")(ret "FREE")
+    if(word == "hold")(ret "HOLD")
+    if(word == "as")(ret "AS")
+    if(word == "IS")(ret "IS")
+    if(word == "true")(ret "BOL_LITERAL")
+    if(word == "false")(ret "BOL_LITERAL")
+
+    ret "NAME"
+)
+
+FN twoCharKind(STR pair) -> STR = (
+    if(pair == "->")(ret "ARROW")
+    if(pair == "==")(ret "EQEQ")
+    if(pair == "!=")(ret "NEQ")
+    if(pair == "<=")(ret "LTE")
+    if(pair == ">=")(ret "GTE")
+    if(pair == "+=")(ret "PLUSEQ")
+    if(pair == "-=")(ret "MINUSEQ")
+    if(pair == "++")(ret "PLUSPLUS")
+    if(pair == "&&")(ret "ANDAND")
+    if(pair == "||")(ret "OROR")
+
+    ret ""
+)
+
+FN oneCharKind(STR ch) -> STR = (
+    if(ch == "(")(ret "LPAREN")
+    if(ch == ")")(ret "RPAREN")
+    if(ch == "{")(ret "LBRACE")
+    if(ch == "}")(ret "RBRACE")
+    if(ch == "[")(ret "LBRACKET")
+    if(ch == "]")(ret "RBRACKET")
+    if(ch == ",")(ret "COMMA")
+    if(ch == ".")(ret "DOT")
+    if(ch == ":")(ret "COLON")
+    if(ch == "=")(ret "EQUAL")
+    if(ch == "+")(ret "PLUS")
+    if(ch == "-")(ret "MINUS")
+    if(ch == "*")(ret "STAR")
+    if(ch == "/")(ret "SLASH")
+    if(ch == "%")(ret "PERCENT")
+    if(ch == "|")(ret "PIPE")
+    if(ch == "<")(ret "LT")
+    if(ch == ">")(ret "GT")
+    if(ch == "!")(ret "BANG")
+
+    ret "UNKNOWN"
+)
+
+FN lexSource(Source.SourceFile source) -> Token.TokenList = (
+    tokens = []
+    text = source.text
+    pos = 0
+    line = 1
+    col = 1
+
+    loop(pos < len(text))(
+        ch = text.pos
+        nextPos = pos + 1
+        next = ""
+
+        if(nextPos < len(text))(
+            next = text.nextPos
+        )
+
+        if(ch == "\n")(
+            *tokens.add(Token.makeToken("NEWLINE", "\n", line, col, line, col + 1))
+            pos += 1
+            line += 1
+            col = 1
+        ) elx(isSpace(ch))(
+            pos += 1
+            col += 1
+        ) elx(ch == "/" && next == "/")(
+            loop(pos < len(text) && text.pos != "\n")(
+                pos += 1
+                col += 1
+            )
+        ) elx(ch == "/" && next == "*")(
+            startLine = line
+            startCol = col
+            pos += 2
+            col += 2
+
+            loop(pos < len(text) && !(text.pos == "*" && pos + 1 < len(text) && text.[pos + 1] == "/"))(
+                if(text.pos == "\n")(
+                    pos += 1
+                    line += 1
+                    col = 1
+                ) else (
+                    pos += 1
+                    col += 1
+                )
+            )
+
+            if(pos < len(text))(
+                pos += 2
+                col += 2
+            ) else (
+                *tokens.add(Token.makeToken("UNKNOWN", "unterminated block comment", startLine, startCol, line, col))
+            )
+        ) elx(isIdentStart(ch))(
+            start = pos
+            startCol = col
+
+            loop(pos < len(text) && isIdentContinue(text.pos))(
+                pos += 1
+                col += 1
+            )
+
+            lexeme = ""
+            j = start
+
+            loop(j < pos)(
+                lexeme += text.j
+                j += 1
+            )
+
+            *tokens.add(Token.makeToken(keywordKind(lexeme), lexeme, line, startCol, line, col))
+        ) elx(isDigit(ch))(
+            start = pos
+            startCol = col
+            sawDot = false
+            scanningNumber = true
+
+            loop(scanningNumber && pos < len(text))(
+                current = text.pos
+                nextPos = pos + 1
+                next = ""
+
+                if(nextPos < len(text))(
+                    next = text.nextPos
+                )
+
+                if(isDigit(current))(
+                    pos += 1
+                    col += 1
+                ) elx(!sawDot && current == "." && isDigit(next))(
+                    sawDot = true
+                    pos += 1
+                    col += 1
+                ) else (
+                    scanningNumber = false
+                )
+            )
+
+            lexeme = ""
+            j = start
+
+            loop(j < pos)(
+                lexeme += text.j
+                j += 1
+            )
+
+            if(sawDot)(
+                *tokens.add(Token.makeToken("FLT_LITERAL", lexeme, line, startCol, line, col))
+            ) else (
+                *tokens.add(Token.makeToken("INT_LITERAL", lexeme, line, startCol, line, col))
+            )
+        ) elx(ch == `"` || ch == "`")(
+            quote = ch
+            startLine = line
+            startCol = col
+            pos += 1
+            col += 1
+            lexeme = ""
+
+            loop(pos < len(text) && text.pos != quote)(
+                piece = text.pos
+                lexeme += piece
+
+                if(piece == "\n")(
+                    line += 1
+                    col = 1
+                ) else (
+                    col += 1
+                )
+
+                pos += 1
+            )
+
+            if(pos < len(text))(
+                pos += 1
+                col += 1
+            )
+
+            *tokens.add(Token.makeToken("STRING_LITERAL", lexeme, startLine, startCol, line, col))
+        ) else (
+            pair = ch + next
+            STR pairKind = twoCharKind(pair)
+
+            if(pairKind != "")(
+                *tokens.add(Token.makeToken(pairKind, pair, line, col, line, col + 2))
+                pos += 2
+                col += 2
+            ) else (
+                *tokens.add(Token.makeToken(oneCharKind(ch), ch, line, col, line, col + 1))
+                pos += 1
+                col += 1
+            )
+        )
+    )
+
+    *tokens.add(Token.makeToken("EOF", "", line, col, line, col))
+    ret tokens
+)

@@ -1,0 +1,76 @@
+use WEB
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 8000
+    })
+
+    WEB.get(REF app, "/health", [], health)
+    WEB.get(REF app, "/account", [auth], account)
+    WEB.get(REF app, "/admin", [auth, adminOnly], admin)
+
+    WEB.listen(REF app)
+)
+
+FN auth(REF[WEB.Req] req) -> BOL = (
+    authHeader = "authorization"
+
+    if(!req.headers.has(authHeader))(
+        *req.res = WEB.json({
+            error = "missing authorization"
+        }, 401)
+
+        ret false
+    )
+
+    token = req.headers.authHeader
+
+    if(token != "Bearer dev-secret")(
+        *req.res = WEB.json({
+            error = "invalid token"
+        }, 403)
+
+        ret false
+    )
+
+    *req.ctx = req.ctx + {
+        "userId" = "user_123",
+        "role" = "admin"
+    }
+
+    ret true
+)
+
+FN adminOnly(REF[WEB.Req] req) -> BOL = (
+    if(req.ctx.role != "admin")(
+        *req.res = WEB.json({
+            error = "admin only"
+        }, 403)
+
+        ret false
+    )
+
+    ret true
+)
+
+FN health(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        ok = true,
+        service = "caster-bank"
+    })
+)
+
+FN account(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        user = req.ctx.userId,
+        balance = 10000,
+        currency = "USD"
+    })
+)
+
+FN admin(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        panel = "admin",
+        user = req.ctx.userId
+    })
+)

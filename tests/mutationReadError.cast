@@ -1,0 +1,8 @@
+FN badRead(REF[ARR[INT]] parts) -> INT = (
+    ret len(*parts)
+)
+
+FN main() -> NUL = (
+    parts = [1, 2]
+    log(badRead(REF parts))
+)

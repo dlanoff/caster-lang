@@ -1,0 +1,17 @@
+use TEST
+use ./localFile
+
+FN hasLocalUserShape(LocalFile.LocalUser user) -> BOL = (
+    ret user.name == "Lin" && user.age == 35
+)
+
+FN main() -> NUL = (
+    LocalFile.LocalUser user = LocalFile.localUser()
+
+    assert(TEST.greeting() == "hello from native", "native import no-arg function")
+    assert(TEST.join("local ", user.name) == "local Lin", "native import args")
+    assert(TEST.score() + 1 == 42, "native import int return")
+    assert(LocalFile.localGreeting(user.name) == "hello Lin", "local file import function")
+    assert(user.age == 35, "local file import MAP type")
+    assert(hasLocalUserShape(user), "local file import qualified MAP type")
+)

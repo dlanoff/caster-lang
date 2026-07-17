@@ -1,0 +1,59 @@
+use OS
+use IO
+use ./driver/diagnostics
+use ./driver/source
+use ./driver/pipeline
+
+FN main() -> NUL = (
+    args = OS.args()
+    path = ""
+    mode = "summary"
+    json = false
+
+    if(len(args) > 1)(
+        if(args.1 == "check")(
+            mode = "check"
+
+            if(len(args) > 2 && args.2 == "--json")(
+                json = true
+
+                if(len(args) > 3)(
+                    path = args.3
+                )
+            ) elx(len(args) > 2)(
+                path = args.2
+            )
+        ) elx(args.1 == "--emit-c")(
+            mode = "c"
+
+            if(len(args) > 2)(
+                path = args.2
+            )
+        ) elx(args.1 == "--json")(
+            json = true
+
+            if(len(args) > 2)(
+                path = args.2
+            )
+        ) else (
+            path = args.1
+        )
+    )
+
+    Source.SourceFile source = Source.loadSource(path)
+    Pipeline.TranspileResult result = Pipeline.transpileSourceWithMode(source, mode)
+
+    if(len(result.diagnostics) > 0)(
+        if(json)(
+            Diagnostics.printDiagnosticsJson(result.diagnostics)
+        ) else (
+            Diagnostics.printDiagnostics(result.diagnostics)
+        )
+    ) elx(mode == "check")(
+        if(json)(
+            IO.print("[]")
+        )
+    ) else (
+        IO.print(result.output)
+    )
+)

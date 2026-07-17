@@ -1,0 +1,1039 @@
+ARR[BOL] Row = []
+ARR[Row] Grid = []
+
+MAP[STR, INT] Scores = {
+    "math" = 1,
+    "science" = 2
+}
+
+ARR[FLT] Ratios = []
+
+MAP[STR, STR] Complex = {}
+MAP[STR, STR] Headers = {}
+
+MAP HttpRes = {
+    INT status = 0,
+    STR body = "",
+    Headers headers = INIT
+}
+
+MAP User = {
+    STR name = "Guest",
+    INT age = 0,
+    ARR[INT] tests = [],
+    Complex tags = INIT
+}
+
+MAP Guest = {
+    STR name = "Guest",
+    INT age = 0,
+    Complex complex = INIT
+}
+
+MAP RefCounter = {
+    INT value = 0
+}
+
+MAP InitConfig = {
+    INT capacity = 8,
+    STR label = "default"
+}
+
+MAP Node = {
+    INT value = 0,
+    REF[Node] next = NUL
+}
+
+MAP Measurement = {
+    FLT temperature = 0.0,
+    FLT count = 0.0
+}
+
+MAP Address = {
+    STR city = "",
+    INT zip = 0
+}
+
+MAP[STR, Address] AddressBook = {}
+
+MAP Profile = {
+    STR name = "",
+    Address home = INIT,
+    ARR[Address] stops = [],
+    AddressBook contacts = INIT,
+    ARR[INT] scores = [],
+    REF[Node] next = NUL
+}
+
+MAP CopyToken = {
+    STR kind = "",
+    STR text = ""
+}
+
+ARR[CopyToken] CopyTokenList = []
+
+MAP CopyBox = {
+    ARR[STR] words = []
+}
+
+MAP Account = {
+    INT id = 0,
+    FLT balance = 0.0,
+    BOL active = false,
+
+    MAP owner = {
+        STR name = "Guest",
+        STR email = ""
+    }
+}
+
+FN decodeUser(DYN data) -> User = (
+    ret data
+)
+
+FN decodeScores(DYN data) -> Scores = (
+    ret data
+)
+
+FN decodeMeasurement(DYN data) -> Measurement = (
+    ret data
+)
+
+FN decodeProfile(DYN data) -> Profile = (
+    ret data
+)
+
+FN testLocalPrimitiveInference() -> BOL = (
+    count = 0
+    name = "Ada"
+    alive = true
+    nums = [1, 2, 3]
+
+    ret count == 0 && name == "Ada" && alive && nums.len() == 3
+)
+
+FN testNamedMapValueInference() -> BOL = (
+    row = Row.INIT()
+    scores = Scores.INIT()
+    user = User.INIT()
+
+    user = user.upd({
+        name = "Ada"
+    })
+
+    scores = scores.upd({
+        "math" = 9
+    })
+
+    ret row.len() == 0 && scores.math == 9 && user.name == "Ada" && user.age == 0
+)
+
+FN testNamedInitChain() -> BOL = (
+    config = InitConfig.INIT()
+        .upd({
+            capacity = 32
+        })
+
+    ret config.capacity == 32 && config.label == "default"
+)
+
+FN testArrayAppendConcatRemove() -> BOL = (
+    nums = []
+    nums = nums.add(1)
+    nums = nums.add([2, 3])
+    nums -= 2
+
+    ret nums.len() == 2 && nums.0 == 1 && nums.1 == 3
+)
+
+FN testNestedArrayDotAccess() -> BOL = (
+    row = []
+    *row.add(true)
+    *row.add(false)
+
+    grid = []
+    *grid.add(row)
+    *grid.add([false, true])
+
+    r = 1
+    c = 0
+
+    ret grid.r.c == false && grid.[r].[c + 1] == true && grid.0.len() == 2
+)
+
+FN testBracketComputedDotLoopContext() -> BOL = (
+    grid = [
+        [1, 2],
+        [3, 4]
+    ]
+
+    total = 0
+    loop([grid] as rows)(
+        total += grid.[rows.i].0
+    )
+
+    ret total == 4
+)
+
+FN testNestedLoopSourceFrame() -> BOL = (
+    grid = [
+        [true, false],
+        [false, true]
+    ]
+
+    matches = 0
+    weighted = 0
+
+    loop([grid])(
+        loop([e])(
+            currentCell = e
+            currentRow = grid.e
+            rowIndex = grid.i
+            colIndex = i
+
+            if(currentCell == currentRow.[colIndex])(
+                matches += 1
+            )
+
+            if(currentCell)(
+                weighted += rowIndex * 10 + colIndex
+            )
+        )
+    )
+
+    ret matches == 4 && weighted == 11
+)
+
+FN testDynamicMapLiteralDotAndComputedDot() -> BOL = (
+    scores = Scores.INIT()
+    subject = "history"
+
+    scores = scores.upd({
+        [subject] = 4,
+        "science" = 5
+    })
+
+    computed = scores.[subject + ""]
+
+    ret scores.history == 4 && scores.subject == 4 && computed == 4 && scores.science == 5
+)
+
+FN testDynamicMapRuntimeJoinRemoveHas() -> BOL = (
+    scores = Scores.INIT()
+    scores = scores.upd({
+        "art" = 3
+    })
+
+    before = scores.has("art")
+    scores -= "art"
+
+    ret before && !scores.has("art")
+)
+
+FN testMapLoop() -> BOL = (
+    scores = Scores.INIT()
+    scores = scores.upd({
+        "art" = 3
+    })
+
+    total = 0
+    loop({scores})(
+        total += val
+    )
+
+    ret total == 6
+)
+
+FN testFixedMapValueAndOverlay() -> BOL = (
+    guest = Guest.INIT()
+    guest = guest.upd({
+        name = "Ada",
+        age = 32
+    })
+
+    ret guest.name == "Ada" && guest.age == 32
+)
+
+FN testFixedMapRuntimeKeyPromotion() -> BOL = (
+    guest = Guest.INIT()
+    guest = {guest} + {
+        "nickname" = "Ada"
+    }
+
+    before = guest.has("nickname")
+    guest -= "nickname"
+
+    ret before && !guest.has("nickname")
+)
+
+FN testPromotedFixedMapRuntimeDotValues() -> BOL = (
+    guest = Guest.INIT()
+    guest = {guest} + {
+        "nickname" = "Ada",
+        "score" = 99
+    }
+
+    ret guest.nickname == "Ada" && guest.score == 99 && guest.name == "Guest"
+)
+
+FN testPromotedFixedMapComputedDotValue() -> BOL = (
+    guest = Guest.INIT()
+    guest = {guest} + {
+        "nickname" = "Ada"
+    }
+
+    key = "nickname"
+    value = guest.key else ""
+
+    ret guest.has(key) && value == "Ada"
+)
+
+FN testPromotedFixedMapLoop() -> BOL = (
+    guest = Guest.INIT()
+    guest = {guest} + {
+        "nickname" = "Ada",
+        "score" = 99
+    }
+
+    count = 0
+    hasNickname = false
+    hasScore = false
+
+    loop({guest})(
+        current = val
+        count += 1
+
+        if(e == "nickname")(
+            hasNickname = true
+        )
+
+        if(e == "score")(
+            hasScore = true
+        )
+    )
+
+    ret count == 5 && hasNickname && hasScore
+)
+
+FN testReturnContextRecordLiteral() -> User = (
+    ret {
+        name = "Ada",
+        tests = [1, 2, 3]
+    }
+)
+
+FN testRecordReturnContext() -> BOL = (
+    User user = testReturnContextRecordLiteral()
+
+    ret user.name == "Ada" && user.age == 0 && user.tests.len() == 3
+)
+
+FN testReturnStructuralLocal() -> User = (
+    user = {
+        name = "Grace"
+    }
+
+    ret user
+)
+
+FN acceptUser(User user) -> STR = (
+    ret user.name
+)
+
+FN testStructuralLocalConformance() -> BOL = (
+    User user = testReturnStructuralLocal()
+    argUser = {
+        name = "Lin"
+    }
+
+    ret user.name == "Grace" && user.age == 0 && acceptUser(argUser) == "Lin"
+)
+
+FN testTypedMapConstructor() -> BOL = (
+    User user = User({
+        name = "Ada",
+        tests = [4, 5]
+    })
+
+    raw = {
+        name = "Lin"
+    }
+    User typed = User(raw)
+    User defaults = User({})
+
+    ret user.name == "Ada" && user.age == 0 && user.tests.len() == 2 && typed.name == "Lin" && typed.age == 0 && defaults.name == "Guest"
+)
+
+FN bumpRefCounter(REF[RefCounter] counter) -> NUL = (
+    *counter.value += 1
+)
+
+FN bumpInt(REF[INT] value) -> NUL = (
+    *value = value + 1
+)
+
+FN replaceInt(REF[INT] value, INT next) -> NUL = (
+    *value = next
+)
+
+FN testRefMutation() -> BOL = (
+    counter = RefCounter.INIT()
+    bumpRefCounter(REF counter)
+
+    value = 1
+    bumpInt(REF value)
+    replaceInt(REF value, 9)
+
+    bumpRefCounter(REF RefCounter)
+
+    ret counter.value == 1 && value == 9 && RefCounter.value == 1
+)
+
+FN testMapReturnContext() -> Scores = (
+    ret {
+        "math" = 8
+    }
+)
+
+FN testDynamicMapReturnContext() -> BOL = (
+    Scores scores = testMapReturnContext()
+
+    ret scores.math == 8
+)
+
+FN testCountLoop() -> BOL = (
+    total = 0
+    loop(3)(
+        total += i
+    )
+
+    ret total == 3
+)
+
+FN testRangeLoop() -> BOL = (
+    total = 0
+    loop(2, 5, 1)(
+        total += e
+    )
+
+    ret total == 9
+)
+
+FN testRangeLoopDefaultStep() -> BOL = (
+    total = 0
+    loop(2, 5)(
+        total += e
+    )
+
+    ret total == 9
+)
+
+FN testConditionLoop() -> BOL = (
+    count = 0
+    loop(count < 3)(
+        count += 1
+    )
+
+    ret count == 3
+)
+
+FN testArrayLoopImplicitContext() -> BOL = (
+    nums = [2, 4]
+    total = 0
+
+    loop([nums])(
+        total += e + i
+    )
+
+    ret total == 7
+)
+
+FN testIfElxElsePass() -> BOL = (
+    value = 2
+
+    if(value == 1)(
+        ret false
+    ) elx(value == 2)(
+        pass
+    ) else(
+        ret false
+    )
+
+    ret true
+)
+
+FN testStringConcatEqualityAndAppend() -> BOL = (
+    message = "a" + "b"
+    message += "c"
+
+    ret message == "abc"
+)
+
+FN testIsAndCheck() -> BOL = (
+    res = HttpRes.INIT()
+    res = res.upd({
+        status = 204
+    })
+
+    ret res.status IS >= 200 && < 300
+)
+
+FN testIsOrCheck() -> BOL = (
+    value = -1
+
+    ret value IS < 0 || >= 10
+)
+
+FN testIsStringSetCheck() -> BOL = (
+    kind = "LBRACE"
+
+    ret kind IS "LPAREN" || "LBRACE" || "LBRACKET"
+)
+
+FN testIsMixedDefaultAndExplicitCheck() -> BOL = (
+    status = "Blocked"
+    blockedStatus = "Blocked"
+    blockedRejected = status IS "Bar" || != blockedStatus
+    openStatus = "Open"
+    openAllowed = openStatus IS "Bar" || != blockedStatus
+    explicitOk = openStatus IS == "Bar" || == "Open"
+
+    ret blockedRejected == false && openAllowed && explicitOk
+)
+
+FN testCollectionUpd() -> BOL = (
+    nums = [1, 2]
+    doubled = nums.upd(e * 2)
+
+    ret doubled.0 == 2 && doubled.1 == 4
+)
+
+FN testCollectionFilt() -> BOL = (
+    nums = [1, 2, 3, 4]
+    kept = nums.filt(e > 2)
+
+    ret kept.len() == 2 && kept.0 == 3 && kept.1 == 4
+)
+
+FN testCollectionSum() -> BOL = (
+    nums = [1, 2, 3]
+
+    ret nums.agg( += e ) == 6 && nums.agg( += e * 2 ) == 12 && nums.agg( += 1 if(e > 1) ) == 2
+)
+
+FN testSequenceFunctions() -> BOL = (
+    nums = [2, 4, 6]
+    text = "Caster 123"
+    scores = Scores.INIT()
+
+    ret len(nums) == 3 && has(nums, 4) && find(nums, 6) == 2 && min(nums) == 2 && max(nums) == 6 && len(text) == 10 && has(text, "st") && find(text, "123") == 7 && len(scores) == 2 && has(scores, "math")
+)
+
+FN testCollectionMethodBody() -> BOL = (
+    User user = testReturnContextRecordLiteral()
+    totals = [user].upd(
+        total = 0
+
+        loop([e.tests])(
+            total += e
+        )
+
+        total
+    )
+
+    ret totals.0 == 6
+)
+
+FN testStringSequenceAndMethods() -> BOL = (
+    text = "a1b2c3"
+    letters = text.filt(isAlpha(e))
+    hiddenDigits = text.upd(
+        if(isDigit(e))(
+            "#"
+        ) else (
+            e
+        )
+    )
+    rebuilt = text.agg( += e )
+    lettersAgain = text.agg( += e if(isAlpha(e)) )
+
+    seen = ""
+    loop("Caster")(
+        seen += e
+    )
+
+    ret text.0 == "a" && text.1 == "1" && letters == "abc" && hiddenDigits == "a#b#c#" && rebuilt == text && lettersAgain == "abc" && seen == "Caster"
+)
+
+FN testCollectionMethodBodyIfElse() -> BOL = (
+    nums = [1, 2, 3, 4]
+
+    updated = nums.upd(
+        if(e % 2 == 0)(
+            e * 10
+        ) else (
+            e
+        )
+    )
+
+    filtered = nums.filt(
+        if(e > 2)(
+            true
+        ) else (
+            false
+        )
+    )
+
+    total = nums.agg(
+        += if(e > 2)(
+            e
+        )
+    )
+
+    ret updated.0 == 1 && updated.1 == 20 && updated.2 == 3 && updated.3 == 40 && filtered.len() == 2 && filtered.0 == 3 && filtered.1 == 4 && total == 7
+)
+
+FN testInPlaceArrayUpdFilt() -> BOL = (
+    nums = [1, 2, 3, 4]
+
+    *nums.upd(e * 2)
+    *nums.filt(e > 4)
+
+    ret nums.len() == 2 && nums.0 == 6 && nums.1 == 8
+)
+
+FN testInPlaceRefArrayUpdFilt() -> BOL = (
+    nums = [1, 2, 3, 4]
+
+    FN keepLarge(REF[ARR[INT]] items) -> NUL = (
+        *items.upd(
+            if(e < 3)(
+                e + 10
+            ) else(
+                e
+            )
+        )
+
+        *items.filt(
+            if(e >= 4)(
+                true
+            ) else(
+                false
+            )
+        )
+    )
+
+    keepLarge(REF nums)
+
+    ret nums.len() == 3 && nums.0 == 11 && nums.1 == 12 && nums.2 == 4
+)
+
+FN testFloatArithmeticAndCollections() -> BOL = (
+    ratio = 1.5
+    ratio += 2
+    ratio -= 0.5
+
+    values = Ratios.INIT()
+    values = values.add(1.0)
+    values = values + [2.5, 3.5]
+    values -= 2.5
+
+    ret ratio == 3.0 && values.len() == 2 && values.agg( += e ) == 4.5 && min(values) == 1.0 && max(values) == 3.5
+)
+
+FN testNilRefDefault() -> BOL = (
+    node = Node.INIT()
+    node.next = NUL
+
+    ret node.next == NUL && NUL == node.next
+)
+
+FN returnNilNode() -> REF[Node] = (
+    ret NUL
+)
+
+FN testNilVoidRefFlow() -> BOL = (
+    node = Node.INIT()
+    node.next = returnNilNode()
+
+    ret node.next == NUL
+)
+
+FN testStringFunctions() -> BOL = (
+    parts = "a,b,c".ARR(",")
+    chars = "abc".ARR()
+    joined = parts.STR()
+    joinedWithDelimiter = parts.STR("|")
+
+    ret trim("  Caster Lang  ") == "Caster Lang" && lower("Caster") == "caster" && upper("Caster") == "CASTER" && replace("hello world", "world", "Caster") == "hello Caster" && starts("main.cast", "main") && ends("main.cast", ".cast") && parts.len() == 3 && parts.0 == "a" && parts.1 == "b" && parts.2 == "c" && chars.len() == 3 && chars.0 == "a" && chars.2 == "c" && joined == "abc" && joinedWithDelimiter == "a|b|c" && isDigit("123") && !isDigit("12a") && isAlpha("Caster") && !isAlpha("Caster1") && isSpace("   ")
+)
+
+FN countChar(STR word, STR target) -> INT = (
+    count = 0
+
+    loop([word.ARR()])(
+        if(e == target)(
+            count += 1
+        )
+    )
+
+    ret count
+)
+
+FN areAnagramsTwoPointer(STR left, STR right) -> BOL = (
+    if(len(left) != len(right))(
+        ret false
+    )
+
+    low = 0
+    high = len(left) - 1
+
+    loop(low <= high)(
+        lowChar = left.low
+        highChar = left.high
+
+        if(countChar(left, lowChar) != countChar(right, lowChar))(
+            ret false
+        )
+
+        if(low != high)(
+            if(countChar(left, highChar) != countChar(right, highChar))(
+                ret false
+            )
+        )
+
+        low += 1
+        high -= 1
+    )
+
+    ret true
+)
+
+FN testTwoPointerAnagrams() -> BOL = (
+    ret areAnagramsTwoPointer("listen", "silent") && areAnagramsTwoPointer("evil", "vile") && !areAnagramsTwoPointer("cast", "cart") && !areAnagramsTwoPointer("abc", "abcc")
+)
+
+FN testMapAgg() -> BOL = (
+    scores = Scores.INIT()
+    scores = scores.upd({
+        "history" = 4
+    })
+
+    ret scores.agg( += val ) == 7 && scores.agg( += val if(e != "science") ) == 5 && scores.agg( += 1 if(val >= 2) ) == 2
+)
+
+FN testJsonDynHasAndDot() -> BOL = (
+    data = JSON(`{"name":"Ada","age":32,"alive":true,"score":2.5,"middle":null}`)
+    nameKey = "name"
+    ageKey = "age"
+    nameObj = data.name
+    age = data.ageKey else 0
+
+    ret data.has(nameKey) && data.has("age") && data.has("alive") && data.has("score") && data.has("middle") && age == 32
+)
+
+FN testJsonDynLoop() -> BOL = (
+    data = JSON(`{"name":"Ada","age":32,"alive":true}`)
+    count = 0
+    hasName = false
+    hasAge = false
+    hasAlive = false
+
+    loop({data})(
+        current = val
+        count += 1
+
+        if(e == "name")(
+            hasName = true
+        )
+
+        if(e == "age")(
+            hasAge = true
+        )
+
+        if(e == "alive")(
+            hasAlive = true
+        )
+    )
+
+    ret count == 3 && hasName && hasAge && hasAlive
+)
+
+FN testJsonDecodeFixedMap() -> BOL = (
+    data = JSON(`{"name":"Ada","age":32}`)
+    User user = decodeUser(data)
+
+    ret user.name == "Ada" && user.age == 32 && user.tests.len() == 0
+)
+
+FN testJsonDecodeDynamicMap() -> BOL = (
+    data = JSON(`{"math":8,"science":9}`)
+    Scores scores = decodeScores(data)
+
+    ret scores.math == 8 && scores.science == 9
+)
+
+FN testJsonDecodeFloatMap() -> BOL = (
+    data = JSON(`{"temperature":98.6,"count":2}`)
+    Measurement measurement = decodeMeasurement(data)
+
+    ret measurement.temperature == 98.6 && measurement.count == 2.0
+)
+
+FN testJsonCjsonEscapes() -> BOL = (
+    data = JSON(`{"name":"\u0041da","path":"\/api\/v1","items":[1,2,3]}`)
+    name = data.name else ""
+    path = data.path else ""
+    third = data.items.2 else 0
+
+    ret name == "Ada" && path == "/api/v1" && third == 3
+)
+
+FN testJsonNestedDynAccess() -> BOL = (
+    data = JSON(`{"user":{"name":"Ada"},"scores":[1,2,3]}`)
+
+    ret data.user.has("name") && has(data.user, "name")
+)
+
+FN testJsonDecodeNestedData() -> BOL = (
+    data = JSON(`{"name":"Ada","home":{"city":"NYC","zip":10001},"stops":[{"city":"SF","zip":94105},{"city":"LA","zip":90001}],"contacts":{"work":{"city":"Boston","zip":2108}},"scores":[1,2,3],"next":null}`)
+    Profile profile = decodeProfile(data)
+
+    ret profile.name == "Ada" && profile.home.city == "NYC" && profile.home.zip == 10001 && profile.stops.len() == 2 && profile.stops.1.city == "LA" && profile.contacts.work.city == "Boston" && profile.scores.2 == 3 && profile.next == NUL
+)
+
+FN decodeAccount(DYN data) -> Account = (
+    ret {
+        id = data.id else 0,
+        balance = data.balance else 0.0,
+        active = data.active else false,
+        owner = {
+            name = data.owner.name else "Guest",
+            email = data.owner.email else ""
+        }
+    }
+)
+
+FN testNestedMapDeclarationDefaults() -> BOL = (
+    account = Account.INIT()
+
+    ret account.id == 0 && account.owner.name == "Guest" && account.owner.email == ""
+)
+
+FN testDynJsonBoundaryDecode() -> BOL = (
+    data = JSON(`{"id":101,"balance":2500.75,"active":true,"owner":{"name":"Ada","email":"ada@example.com"}}`)
+    Account account = decodeAccount(data)
+
+    ret account.id == 101 && account.balance == 2500.75 && account.active && account.owner.name == "Ada" && account.owner.email == "ada@example.com"
+)
+
+FN testDynFallbackCoercions() -> BOL = (
+    data = JSON(`{"name":"Ada","age":32,"balance":2500.75,"active":true}`)
+    name = data.name else "Guest"
+    age = data.age else 0
+    balance = data.balance else 0.0
+    active = data.active else false
+
+    ret name == "Ada" && age == 32 && balance == 2500.75 && active
+)
+
+FN makeNestedStructuralProfile() -> Profile = (
+    profile = {
+        name = "Grace",
+        home = {
+            city = "Arlington",
+            zip = 22201
+        }
+    }
+
+    ret profile
+)
+
+FN testNestedStructuralLocalConformance() -> BOL = (
+    Profile profile = makeNestedStructuralProfile()
+
+    ret profile.name == "Grace" && profile.home.city == "Arlington" && profile.home.zip == 22201 && profile.stops.len() == 0 && profile.next == NUL
+)
+
+FN returnEmptyInts() -> ARR[INT] = (
+    values = []
+
+    ret values
+)
+
+FN acceptInts(ARR[INT] values) -> INT = (
+    ret values.len()
+)
+
+FN testEmptyArrayLaterTypedContext() -> BOL = (
+    values = []
+
+    ret returnEmptyInts().len() == 0 && acceptInts(values) == 0
+)
+
+FN testShapeFillComputedDimensions() -> BOL = (
+    depth = 2 * 30 / 30
+    grid = [2x3xdepth].fill(7)
+
+    ret grid.len() == 2 && grid.0.len() == 3 && grid.[0].[0].len() == 2 && grid.[1].[2].[1] == 7
+)
+
+FN testShapeFillRandPerCell() -> BOL = (
+    grid = [2x2].fill(RAND(1) * 100)
+
+    allInRange = grid.agg(
+        += .agg(
+            += 1 if(e >= 0.0 && e < 100.0)
+        )
+    )
+    different = grid.[0].[0] != grid.[0].[1] || grid.[0].[0] != grid.[1].[0] || grid.[0].[0] != grid.[1].[1]
+
+    ret grid.len() == 2 && grid.0.len() == 2 && allInRange == 4 && different
+)
+
+FN testValueElseFallback() -> BOL = (
+    emptyText = "" else "Guest"
+    fullText = "Ada" else "Guest"
+    zeroCount = 0 else 7
+    realCount = 3 else 7
+    zeroRatio = 0.0 else 1.5
+    alive = false else true
+
+    node = Node.INIT()
+    chosenRef = node.next else REF node
+
+    data = JSON(`{"name":"","age":0,"good":42,"nested":{"city":"Paris","zip":75000},"items":[0,5]}`)
+    jsonName = data.name else "Guest"
+    jsonAge = data.age else 99
+    jsonGood = data.good else 99
+    nestedName = data.nested.city else "Unknown"
+    firstItem = data.items.0 else 8
+    secondItem = data.items.1 else 8
+    missingText = data.missing else "Missing"
+    address = data.nested else Address
+    fallbackAddress = data.missingAddress else Address
+
+    ret emptyText == "Guest" && fullText == "Ada" && zeroCount == 7 && realCount == 3 && zeroRatio == 1.5 && alive && chosenRef == REF node && jsonName == "Guest" && jsonAge == 99 && jsonGood == 42 && nestedName == "Paris" && firstItem == 8 && secondItem == 5 && missingText == "Missing" && address.city == "Paris" && fallbackAddress.city == ""
+)
+
+FN testFunctionCall() -> BOL = (
+    ret testCollectionSum()
+)
+
+FN testNestedFunctionRefMutation() -> BOL = (
+    total = 1
+    values = [1]
+
+    FN add(REF[INT] total, REF[ARR[INT]] values, INT value) -> NUL = (
+        *total = total + value
+        *values.add(value)
+    )
+
+    add(REF total, REF values, 2)
+    add(REF total, REF values, 3)
+
+    ret total == 6 && values.len() == 3 && values.agg( += e ) == 6
+)
+
+FN firstCopyToken(REF[CopyTokenList] tokens) -> CopyToken = (
+    ret tokens.0
+)
+
+FN readFirstAndDrop(REF[CopyTokenList] tokens) -> STR = (
+    CopyToken token = firstCopyToken(tokens)
+    ret token.text
+)
+
+FN mutateCopyBox(CopyBox box) -> STR = (
+    box.words.0 = "changed"
+    ret box.words.0
+)
+
+FN makeCopyBox() -> CopyBox = (
+    ret {
+        words = ["original"]
+    }
+)
+
+FN testArrayElementValueCopy() -> BOL = (
+    tokens = CopyTokenList.INIT()
+    *tokens.add({
+        kind = "NAME",
+        text = "alpha"
+    })
+
+    STR firstText = readFirstAndDrop(REF tokens)
+    tokenStillValid = tokens.0.kind == "NAME" && tokens.0.text == "alpha"
+
+    CopyBox box = makeCopyBox()
+    STR changedLocal = mutateCopyBox(box)
+
+    ret firstText == "alpha" && tokenStillValid && changedLocal == "changed" && box.words.0 == "original"
+)
+
+assert(true)
+assert(testLocalPrimitiveInference(), "local primitive inference")
+assert(testNamedMapValueInference(), "named MAP value inference")
+assert(testNamedInitChain(), "named INIT chain")
+assert(testArrayAppendConcatRemove(), "array append concat remove")
+assert(testNestedArrayDotAccess(), "nested array dot access")
+assert(testBracketComputedDotLoopContext(), "bracket computed dot loop context")
+assert(testNestedLoopSourceFrame(), "nested loop source frame")
+assert(testDynamicMapLiteralDotAndComputedDot(), "dynamic map literal dot computed dot")
+assert(testDynamicMapRuntimeJoinRemoveHas(), "dynamic map runtime join remove has")
+assert(testMapLoop(), "map loop")
+assert(testFixedMapValueAndOverlay(), "fixed MAP value overlay")
+assert(testFixedMapRuntimeKeyPromotion(), "fixed map runtime-key promotion")
+assert(testPromotedFixedMapRuntimeDotValues(), "promoted fixed map runtime dot values")
+assert(testPromotedFixedMapComputedDotValue(), "promoted fixed map computed dot value")
+assert(testPromotedFixedMapLoop(), "promoted fixed map loop")
+assert(testRecordReturnContext(), "record return context")
+assert(testStructuralLocalConformance(), "structural local conformance")
+assert(testTypedMapConstructor(), "typed MAP constructor")
+assert(testRefMutation(), "REF mutation")
+assert(testDynamicMapReturnContext(), "dynamic map return context")
+assert(testCountLoop(), "count loop")
+assert(testRangeLoop(), "range loop")
+assert(testRangeLoopDefaultStep(), "range loop default step")
+assert(testConditionLoop(), "condition loop")
+assert(testArrayLoopImplicitContext(), "array loop implicit context")
+assert(testIfElxElsePass(), "if elx else pass")
+assert(testStringConcatEqualityAndAppend(), "string concat equality append")
+assert(testIsAndCheck(), "IS and check")
+assert(testIsOrCheck(), "IS or check")
+assert(testIsStringSetCheck(), "IS string set check")
+assert(testIsMixedDefaultAndExplicitCheck(), "IS mixed default explicit check")
+assert(testCollectionUpd(), "collection upd")
+assert(testCollectionFilt(), "collection filt")
+assert(testCollectionSum(), "collection sum")
+assert(testSequenceFunctions(), "sequence functions")
+assert(testCollectionMethodBody(), "collection method body")
+assert(testStringSequenceAndMethods(), "string sequence methods")
+assert(testCollectionMethodBodyIfElse(), "collection method body if else")
+assert(testInPlaceArrayUpdFilt(), "in-place array upd filt")
+assert(testInPlaceRefArrayUpdFilt(), "in-place REF array upd filt")
+assert(testStringFunctions(), "string functions")
+assert(testTwoPointerAnagrams(), "two pointer anagrams")
+assert(testFloatArithmeticAndCollections(), "float arithmetic and collections")
+assert(testNilRefDefault(), "NUL REF default")
+assert(testNilVoidRefFlow(), "NUL NUL into REF")
+assert(testMapAgg(), "map agg")
+assert(testJsonDynHasAndDot(), "json DYN has and dot")
+assert(testJsonDynLoop(), "json DYN loop")
+assert(testJsonDecodeFixedMap(), "json decode fixed map")
+assert(testJsonDecodeDynamicMap(), "json decode dynamic map")
+assert(testJsonDecodeFloatMap(), "json decode float map")
+assert(testJsonCjsonEscapes(), "json cJSON escapes")
+assert(testJsonNestedDynAccess(), "json nested DYN access")
+assert(testJsonDecodeNestedData(), "json decode nested data")
+assert(testNestedMapDeclarationDefaults(), "nested MAP declaration defaults")
+assert(testDynJsonBoundaryDecode(), "DYN json boundary decode")
+assert(testDynFallbackCoercions(), "DYN fallback coercions")
+assert(testNestedStructuralLocalConformance(), "nested structural local conformance")
+assert(testEmptyArrayLaterTypedContext(), "empty array later typed context")
+assert(testShapeFillComputedDimensions(), "shape fill computed dimensions")
+assert(testShapeFillRandPerCell(), "shape fill RAND per cell")
+assert(testValueElseFallback(), "value else fallback")
+assert(testFunctionCall(), "function call")
+assert(testNestedFunctionRefMutation(), "nested function REF mutation")
+assert(testArrayElementValueCopy(), "array element value copy")

@@ -1,0 +1,54 @@
+MAP Node = {
+    INT value = 0,
+    REF[Node] next = NUL
+}
+
+MAP List = {
+    REF[Node] head = NUL,
+    REF[Node] tail = NUL,
+    INT count = 0
+}
+
+FN testNestedAppendAndPrint() -> BOL = (
+    list = List.INIT()
+    first = Node.INIT()
+    second = Node.INIT()
+    third = Node.INIT()
+
+    FN append(REF[List] list, REF[Node] node, INT value) -> NUL = (
+        *node.value = value
+        *node.next = NUL
+
+        if(list.head == NUL)(
+            *list.head = node
+            *list.tail = node
+        ) else (
+            tail = list.tail
+            *tail.next = node
+            *list.tail = node
+        )
+
+        *list.count += 1
+    )
+
+    FN printList(REF[List] list) -> NUL = (
+        current = list.head
+
+        loop(current != NUL)(
+            log(current.value)
+            current = current.next
+        )
+    )
+
+    append(REF list, REF first, 10)
+    append(REF list, REF second, 20)
+    append(REF list, REF third, 30)
+
+    printList(REF list)
+
+    ret list.count == 3 && list.head.value == 10 && list.head.next.value == 20 && list.tail.value == 30
+)
+
+FN main() -> NUL = (
+    assert(testNestedAppendAndPrint(), "nested linked list append and print")
+)

@@ -1,0 +1,6 @@
+use BUF
+use ./writer
+
+FN emitFsAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static FLX_STR FS_read(FLX_STR path) { char *cpath = flx_str_to_c(path); FILE *f = fopen(cpath, "rb"); free(cpath); if (!f) return flx_str_lit("", 0); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET); if (n < 0) { fclose(f); return flx_str_lit("", 0); } char *data = malloc((size_t)n + 1); if (!data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } size_t got = fread(data, 1, (size_t)n, f); fclose(f); data[got] = 0; return (FLX_STR){ data, (int64_t)got }; }`)
+)

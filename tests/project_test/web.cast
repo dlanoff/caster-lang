@@ -1,0 +1,155 @@
+use WEB
+
+FN health(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.text(req.path)
+)
+
+FN account(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        id = req.params.id,
+        ok = true
+    })
+)
+
+FN badRequest(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        error = "bad request"
+    }, 400)
+)
+
+FN search(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        path = req.path,
+        term = req.query.term,
+        page = req.query.page,
+        encoded = req.query.encoded
+    })
+)
+
+FN attachUser(REF[WEB.Req] req) -> BOL = (
+    *req.ctx = req.ctx + {
+        "userId" = "user_123"
+    }
+
+    ret true
+)
+
+FN requireAuth(REF[WEB.Req] req) -> BOL = (
+    key = "authorization"
+
+    if(!req.headers.has(key))(
+        *req.res = WEB.json({
+            error = "missing authorization"
+        }, 401)
+
+        ret false
+    )
+
+    ret true
+)
+
+FN profile(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        user = req.ctx.userId
+    })
+)
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 9090
+    })
+
+    WEB.get(REF app, "/health", [], health)
+    WEB.get(REF app, "/accounts/:id", [], account)
+    WEB.get(REF app, "/bad", [], badRequest)
+    WEB.get(REF app, "/search", [], search)
+    WEB.get(REF app, "/profile", [attachUser], profile)
+    WEB.get(REF app, "/private", [requireAuth], profile)
+
+    healthRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/health"
+    })
+
+    assert(healthRes.status == 200, "WEB dispatch text status")
+    assert(healthRes.body == "/health", "WEB dispatch text body")
+    assert(healthRes.headers.has("content-type"), "WEB text content-type")
+
+    accountRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/accounts/A%2042"
+    })
+
+    accountBody = JSON(accountRes.body)
+    accountId = accountBody.id else ""
+    accountOk = accountBody.ok else false
+
+    assert(accountRes.status == 200, "WEB dispatch JSON status")
+    assert(accountRes.headers.has("content-type"), "WEB JSON content-type")
+    assert(accountId == "A 42", "WEB path param URL decoded")
+    assert(accountOk, "WEB JSON bool")
+
+    badRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/bad"
+    })
+
+    badBody = JSON(badRes.body)
+    badMessage = badBody.error else ""
+
+    assert(badRes.status == 400, "WEB JSON optional status")
+    assert(badMessage == "bad request", "WEB JSON optional status body")
+
+    searchRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/search?term=hello+caster&page=2&encoded=A%20B"
+    })
+
+    searchBody = JSON(searchRes.body)
+    searchPath = searchBody.path else ""
+    searchTerm = searchBody.term else ""
+    searchPage = searchBody.page else ""
+    searchEncoded = searchBody.encoded else ""
+
+    assert(searchRes.status == 200, "WEB query status")
+    assert(searchPath == "/search", "WEB query path cleaned")
+    assert(searchTerm == "hello caster", "WEB query plus decoded")
+    assert(searchPage == "2", "WEB query page")
+    assert(searchEncoded == "A B", "WEB query percent decoded")
+
+    profileRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/profile"
+    })
+
+    profileBody = JSON(profileRes.body)
+    profileUser = profileBody.user else ""
+
+    assert(profileRes.status == 200, "WEB middleware continue status")
+    assert(profileUser == "user_123", "WEB middleware ctx mutation")
+
+    privateRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/private"
+    })
+
+    privateBody = JSON(privateRes.body)
+    privateError = privateBody.error else ""
+
+    assert(privateRes.status == 401, "WEB middleware stop status")
+    assert(privateError == "missing authorization", "WEB middleware stop body")
+
+    missingRes = WEB.dispatch(REF app, {
+        method = "GET",
+        path = "/missing"
+    })
+
+    assert(missingRes.status == 404, "WEB not found")
+
+    methodRes = WEB.dispatch(REF app, {
+        method = "POST",
+        path = "/health"
+    })
+
+    assert(methodRes.status == 405, "WEB method not allowed")
+)

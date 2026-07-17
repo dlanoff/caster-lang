@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import html
+import re
+
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT_DIR = ROOT / "docs" / "readme-assets"
+
+
+SNIPPETS = [
+    (
+        "readme-quick-start.svg",
+        "Quick start commands",
+        "SHELL",
+        """make install-caster
+caster ./examples/auth.cast""",
+    ),
+    (
+        "readme-web-main.svg",
+        "Route-first WEB app",
+        "CASTER",
+        """use WEB
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 8080
+    })
+
+    WEB.get(REF app, "/accounts/:id", [auth], getAccount)
+
+    WEB.listen(REF app)
+)
+
+FN auth(REF[WEB.Req] req) -> BOL = (
+    key = "authorization"
+
+    if(!req.headers.has(key))(
+        *req.res = WEB.json({
+            error = "missing authorization"
+        }, 401)
+
+        ret false
+    )
+
+    *req.ctx = req.ctx + {
+        "userId" = "user_123"
+    }
+
+    ret true
+)
+
+FN getAccount(REF[WEB.Req] req) -> WEB.Res = (
+    payments = [
+        { amount = 120, settled = true, kind = "sale" },
+        { amount = 35, settled = false, kind = "sale" },
+        { amount = 10, settled = true, kind = "refund" }
+    ]
+
+    revenue = payments
+        .filt(e.settled && e.kind == "sale")
+        .agg(
+            += e.amount
+        )
+
+    ret WEB.json({
+        user = req.ctx.userId,
+        account = req.params.id,
+        revenue = revenue
+    })
+)""",
+    ),
+    (
+        "readme-functions.svg",
+        "Typed boundaries and inferred locals",
+        "CASTER",
+        """FN greet(STR name) -> STR = (
+    prefix = "Hello, "
+    ret prefix + name
+)
+
+FN main() -> NUL = (
+    STR message = greet("Caster")
+    excited = message + "!"
+
+    log(excited) // Hello, Caster!
+)""",
+    ),
+    (
+        "readme-maps.svg",
+        "MAP declaration, updates, and loops",
+        "CASTER",
+        """MAP User = {
+    STR name = "",
+    INT age = 0
+}
+
+MAP[STR, INT] Scores = {
+    "math" = 95,
+    "science" = 88
+}
+
+FN mapTour() -> INT = (
+    user = {
+        name = "Ada",
+        age = 37
+    }
+
+    scores = {
+        "math" = 95,
+        "science" = 88
+    }
+    scores = {scores} + {
+        "history" = 92
+    }
+
+    total = 0
+    loop({scores})(
+        log(e, val) // "math" 95, ...
+        total += val
+    )
+
+    ret total
+)""",
+    ),
+    (
+        "readme-arrays.svg",
+        "ARR add, methods, and loops",
+        "CASTER",
+        """ARR[INT] Numbers = []
+
+FN arrayTour() -> INT = (
+    nums = []
+    nums = nums.add(1)       // [1]
+    nums = nums.add([2, 3])  // [1, 2, 3]
+    *nums.add(4)             // nums is [1, 2, 3, 4]
+
+    doubled = nums.upd(e * 2)     // [2, 4, 6, 8]
+    large = nums.filt(e >= 3)     // [3, 4]
+    total = nums.agg( += e )      // 10
+    anyLarge = nums.any(e > 3)    // true
+
+    loop([nums])(
+        log(i, e) // 0 1, 1 2, ...
+    )
+
+    ret total
+)""",
+    ),
+    (
+        "readme-loops.svg",
+        "Canonical loop forms",
+        "CASTER",
+        """loop(3)(
+    log(i) // 0, 1, 2
+)
+
+loop(0, 5)(
+    log(e) // 0, 1, 2, 3, 4
+)
+
+loop(0, 10, 2)(
+    log(e) // 0, 2, 4, 6, 8
+)
+
+count = 0
+loop(count < 3)(
+    log(count) // 0, 1, 2
+    count += 1
+)
+
+loop([nums])(
+    log(i, e) // index and element
+)
+
+loop({scores})(
+    log(e, val) // key and value
+)""",
+    ),
+    (
+        "readme-nested-loops.svg",
+        "Nested loop frames",
+        "CASTER",
+        """grid = [
+    [true, false],
+    [false, true]
+]
+
+loop([grid])(
+    loop([e])(
+        rowIndex = grid.i
+        colIndex = i
+        cell = e
+
+        log(rowIndex, colIndex, cell)
+    )
+)
+
+loop([cube])(
+    loop([e] as rows)(
+        loop([rows.e])(
+            log(cube.i, rows.i, i, e)
+        )
+    )
+)""",
+    ),
+    (
+        "readme-collections.svg",
+        "Collection pipelines",
+        "CASTER",
+        """report = orders
+    .filt(e.status IS "PAID" || "SHIPPED")
+    .upd({
+        customer = e.customer,
+        revenue = e.items.agg(
+            += item.price * item.qty
+        ),
+        cost = e.items.agg(
+            += item.cost * item.qty
+        )
+    })
+    .group(e.customer)
+    .upd({
+        customer = customer.key,
+        revenue = customer.val.agg(
+            += e.revenue
+        ),
+        margin = customer.val.agg(
+            += e.revenue - e.cost
+        )
+    })
+    .sort(e.margin DESC)""",
+    ),
+    (
+        "readme-json-dyn.svg",
+        "JSON and DYN boundary",
+        "CASTER",
+        """MAP Account = {
+    INT id = 0,
+    FLT balance = 0.0,
+    BOL active = false
+}
+
+FN decodeAccount(DYN data) -> Account = (
+    ret {
+        id = data.id else 0,
+        balance = data.balance else 0.0,
+        active = data.active else false
+    }
+)
+
+FN fetchAccount(STR body) -> Account = (
+    ret decodeAccount(JSON(body))
+)""",
+    ),
+    (
+        "readme-refs.svg",
+        "REF and mutation",
+        "CASTER",
+        """MAP Counter = {
+    INT value = 0
+}
+
+FN bump(REF[Counter] counter) -> NUL = (
+    *counter.value += 1
+)
+
+FN makeCounter() -> Counter = (
+    ret {}
+)
+
+FN main() -> NUL = (
+    Counter counter = makeCounter()
+    bump(REF counter)
+    log(counter.value) // 1
+)""",
+    ),
+    (
+        "readme-dot-is.svg",
+        "Dot access and IS",
+        "CASTER",
+        """cell = grid.row.col
+next = grid.[row + 1].col
+score = scores.[selectKey(user, mode)]
+name = data.owner.name else "Guest"
+
+if(item.kind IS "LPAREN" || "LBRACE" || "LBRACKET")(
+    log("opening delimiter")
+)
+
+if(code IS >= 200 && < 300)(
+    log("success")
+)""",
+    ),
+]
+
+
+KEYWORDS = {
+    "FN",
+    "ret",
+    "if",
+    "elx",
+    "else",
+    "loop",
+    "hold",
+    "throw",
+    "pass",
+    "use",
+    "REF",
+    "FREE",
+    "IS",
+    "as",
+}
+BLUE_WORDS = {"WEB", "REQ", "SQL", "OS", "FS", "PATH", "PROC", "IO", "BUF", "NUL"}
+TYPE_WORDS = {"INT", "FLT", "STR", "BOL", "ARR", "MAP", "OBJ", "DYN", "TSK"}
+CONSTANT_WORDS = {"true", "false", "INIT"}
+LOOP_WORDS = {"i", "e", "val"}
+OPERATORS = {"+=", "-=", "++", "==", "!=", "<=", ">=", "&&", "||", "->"}
+
+
+def peek_non_space(text, index):
+    i = index
+    while i < len(text) and text[i].isspace():
+        i += 1
+    return text[i] if i < len(text) else ""
+
+
+def previous_non_space(text, index):
+    i = index - 1
+    while i >= 0 and text[i].isspace():
+        i -= 1
+    return text[i] if i >= 0 else ""
+
+
+def tspan(class_name, text):
+    escaped = html.escape(text, quote=False)
+    return f'<tspan class="{class_name}">{escaped}</tspan>'
+
+
+def highlight_line(text):
+    out = []
+    i = 0
+    expect_function_name = False
+
+    while i < len(text):
+        ch = text[i]
+        next_ch = text[i + 1] if i + 1 < len(text) else ""
+
+        if ch == "/" and next_ch == "/":
+            out.append(tspan("comment", text[i:]))
+            break
+
+        if ch == "`":
+            end = text.find("`", i + 1)
+            finish = len(text) if end == -1 else end + 1
+            out.append(tspan("str", text[i:finish]))
+            i = finish
+            continue
+
+        if ch == '"':
+            finish = i + 1
+            while finish < len(text):
+                if text[finish] == "\\":
+                    finish += 2
+                    continue
+                if text[finish] == '"':
+                    finish += 1
+                    break
+                finish += 1
+            out.append(tspan("str", text[i:finish]))
+            i = finish
+            continue
+
+        if ch.isdigit():
+            start = i
+            i += 1
+            while i < len(text) and text[i].isdigit():
+                i += 1
+            if i < len(text) and text[i] == "." and i + 1 < len(text) and text[i + 1].isdigit():
+                i += 1
+                while i < len(text) and text[i].isdigit():
+                    i += 1
+            out.append(tspan("num", text[start:i]))
+            continue
+
+        if re.match(r"[A-Za-z_]", ch):
+            start = i
+            i += 1
+            while i < len(text) and re.match(r"[A-Za-z0-9_]", text[i]):
+                i += 1
+            word = text[start:i]
+            after = peek_non_space(text, i)
+            before = previous_non_space(text, start)
+            is_qualified_prefix = after == "." and word[0].isupper()
+            is_qualified_type = before == "." and word[0].isupper()
+            is_method = before == "." and after == "("
+            is_call = after == "("
+
+            if word in BLUE_WORDS or is_qualified_prefix:
+                cls = "blue"
+            elif word in TYPE_WORDS or is_qualified_type:
+                cls = "type"
+            elif word in CONSTANT_WORDS:
+                cls = "num"
+            elif word in KEYWORDS:
+                cls = "kw"
+            elif word in LOOP_WORDS:
+                cls = "loop"
+            elif expect_function_name or is_method or is_call:
+                cls = "fn"
+            else:
+                cls = "base-fill"
+
+            out.append(tspan(cls, word))
+            expect_function_name = word == "FN" and after != "["
+            if word != "FN":
+                expect_function_name = False
+            continue
+
+        two = text[i : i + 2]
+        if two in OPERATORS:
+            out.append(tspan("op", two))
+            i += 2
+            continue
+
+        if ch in "=+-*/%<>!&.*":
+            out.append(tspan("op", ch))
+            i += 1
+            continue
+
+        out.append(html.escape(ch, quote=False))
+        i += 1
+
+    return "".join(out)
+
+
+def svg_for(filename, title, label, code):
+    lines = code.splitlines()
+    max_len = max((len(line) for line in lines), default=0)
+    width = max(860, min(1280, 96 + max_len * 10))
+    height = 72 + len(lines) * 26 + 28
+    title_x = max(36, width - 36 - len(label) * 8)
+    path = (
+        f"M18 61 C{width * 0.18:.0f} 25 {width * 0.30:.0f} 82 {width * 0.44:.0f} 58 "
+        f"C{width * 0.60:.0f} 25 {width * 0.72:.0f} 92 {width * 0.84:.0f} 58 "
+        f"C{width * 0.91:.0f} 40 {width * 0.96:.0f} 46 {width - 18} 64"
+    )
+
+    text_lines = []
+    y = 78
+    for line in lines:
+        text_lines.append(
+            f'  <text class="base" xml:space="preserve" x="36" y="{y}">{highlight_line(line)}</text>'
+        )
+        y += 26
+
+    title_escaped = html.escape(title)
+    desc = html.escape(f"Syntax highlighted code block: {title}.")
+    label_escaped = html.escape(label)
+    return f'''<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">{title_escaped}</title>
+  <desc id="desc">{desc}</desc>
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7457d9"/>
+      <stop offset="0.55" stop-color="#1f7bd6"/>
+      <stop offset="1" stop-color="#a87924"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .base {{ font: 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #e8eef7; }}
+      .title {{ font: 700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #8ca3b8; letter-spacing: .04em; }}
+      .kw {{ fill: #ff5f6d; font-weight: 700; }}
+      .fn {{ fill: #c792ea; }}
+      .blue {{ fill: #4da3ff; }}
+      .type {{ fill: #9dd6ff; }}
+      .num {{ fill: #9dd6ff; }}
+      .loop {{ fill: #ffe49c; }}
+      .str {{ fill: #f6c177; }}
+      .op {{ fill: #95a7bd; }}
+      .comment {{ fill: #8ca3b8; font-style: italic; }}
+      .base-fill {{ fill: #e8eef7; }}
+    </style>
+  </defs>
+  <rect x="1" y="1" width="{width - 2}" height="{height - 2}" rx="14" fill="url(#rim)" opacity="0.86"/>
+  <rect x="3" y="3" width="{width - 6}" height="{height - 6}" rx="13" fill="#0f1420"/>
+  <path d="{path}" fill="none" stroke="#7457d9" stroke-width="1.25" opacity="0.38" filter="url(#glow)"/>
+  <circle cx="29" cy="29" r="5.5" fill="#ff5f6d"/>
+  <circle cx="50" cy="29" r="5.5" fill="#f6c177"/>
+  <circle cx="71" cy="29" r="5.5" fill="#4da3ff"/>
+  <text class="title" x="{title_x}" y="34">{label_escaped}</text>
+  <text class="title" x="{width - 56}" y="60" fill="#f6c177">*</text>
+{chr(10).join(text_lines)}
+</svg>
+'''
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for filename, title, label, code in SNIPPETS:
+        (OUT_DIR / filename).write_text(svg_for(filename, title, label, code), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

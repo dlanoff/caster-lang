@@ -1,0 +1,18 @@
+use REQ
+
+FN main() -> NUL = (
+    task = REQ.get("http://localhost:8000/")
+    res = hold task
+
+    assert(res.status == 200, "REQ.get status")
+    assert(res.body == `{"status": "ok", "message": "Hello from Python"}`, "REQ.get body")
+
+    userTask = REQ.get("http://localhost:8000/")
+    postsTask = REQ.get("http://localhost:8000/")
+    results = hold [userTask, postsTask]
+
+    assert(results.0.status == 200, "hold first status")
+    assert(results.1.status == 200, "hold second status")
+    assert(results.0.body == res.body, "hold first body")
+    assert(results.1.body == res.body, "hold second body")
+)

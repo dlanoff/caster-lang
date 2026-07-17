@@ -1,0 +1,80 @@
+use ./diagnostics
+use ./../analyze/analyzer
+use ./../emit/emit
+use ./../emit/summary
+use ./../ast/ast
+use ./../features/arr
+use ./../features/call
+use ./../features/feature
+use ./../features/map
+use ./../loading/loader
+use ./../lex/lexer
+use ./../parse/parser
+use ./source
+use ./../lex/token
+
+MAP TranspileResult = {
+    STR output = "",
+    Feature.FeatureSet features = INIT,
+    Ast.Program program = INIT,
+    Diagnostics.DiagnosticList diagnostics = []
+}
+
+FN buildFeatureSet() -> Feature.FeatureSet = (
+    Feature.FeatureSet features = Feature.empty()
+    features = Arr.register(features)
+    features = Map.register(features)
+    features = Call.register(features)
+
+    ret features
+)
+
+FN transpileSourceWithMode(Source.SourceFile source, STR mode) -> TranspileResult = (
+    Feature.FeatureSet features = buildFeatureSet()
+    Token.TokenList tokens = Lexer.lexSource(source)
+    Parser.ParseResult parsed = Parser.parseTokens(source.path, tokens, features)
+    output = ""
+    program = parsed.program
+    diagnostics = parsed.diagnostics
+
+    if(mode == "c" || mode == "check")(
+        Loader.LoadResult loaded = Loader.loadProgram(source, features)
+        program = loaded.program
+        diagnostics = loaded.diagnostics
+
+        if(len(diagnostics) == 0)(
+            Diagnostics.DiagnosticList analyzed = Analyzer.analyzeProgram(source.path, loaded.program)
+
+            loop([analyzed])(
+                *diagnostics.add(e)
+            )
+        )
+
+        if(mode == "c" && len(diagnostics) == 0)(
+            output = Emit.emitProgramC(loaded.program)
+        )
+    ) else (
+        if(len(diagnostics) == 0)(
+            Diagnostics.DiagnosticList analyzed = Analyzer.analyzeProgram(source.path, parsed.program)
+
+            loop([analyzed])(
+                *diagnostics.add(e)
+            )
+        )
+
+        if(len(diagnostics) == 0)(
+            output = Summary.emitProgramSummary(source, parsed.program, tokens, features)
+        )
+    )
+
+    ret {
+        output = output,
+        features = features,
+        program = program,
+        diagnostics = diagnostics
+    }
+)
+
+FN transpileSource(Source.SourceFile source) -> TranspileResult = (
+    ret transpileSourceWithMode(source, "summary")
+)

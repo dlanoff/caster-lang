@@ -1,0 +1,411 @@
+use ./cursor
+use ./../ast/ast
+use ./../lex/token
+
+FN tokenText(Token.Token tok) -> STR = (
+    if(tok.kind == "STRING_LITERAL")(
+        ret `"` + tok.lexeme + `"`
+    )
+
+    if(tok.kind == "NEWLINE" || tok.kind == "EOF")(
+        ret ""
+    )
+
+    ret tok.lexeme
+)
+
+FN binaryOp(STR kind) -> STR = (
+    if(kind == "OROR")(ret "||")
+    if(kind == "ANDAND")(ret "&&")
+    if(kind == "EQEQ")(ret "==")
+    if(kind == "NEQ")(ret "!=")
+    if(kind == "LT")(ret "<")
+    if(kind == "LTE")(ret "<=")
+    if(kind == "GT")(ret ">")
+    if(kind == "GTE")(ret ">=")
+    if(kind == "PIPE")(ret "|")
+    if(kind == "PLUS")(ret "+")
+    if(kind == "MINUS")(ret "-")
+    if(kind == "STAR")(ret "*")
+    if(kind == "SLASH")(ret "/")
+    if(kind == "PERCENT")(ret "%")
+    if(kind == "IS")(ret "IS")
+
+    ret ""
+)
+
+FN precedence(STR kind) -> INT = (
+    if(kind == "OROR")(ret 1)
+    if(kind == "ANDAND")(ret 2)
+    if(kind == "EQEQ" || kind == "NEQ" || kind == "IS")(ret 3)
+    if(kind == "LT" || kind == "LTE" || kind == "GT" || kind == "GTE")(ret 4)
+    if(kind == "PIPE" || kind == "PLUS" || kind == "MINUS")(ret 5)
+    if(kind == "STAR" || kind == "SLASH" || kind == "PERCENT")(ret 6)
+
+    ret 0
+)
+
+FN isExpressionBoundary(STR kind) -> BOL = (
+    ret kind == "COMMA" || kind == "RPAREN" || kind == "RBRACKET" || kind == "RBRACE" || kind == "NEWLINE" || kind == "EOF"
+)
+
+FN memberText(Token.Token tok) -> STR = (
+    if(tok.kind == "INT_LITERAL")(
+        ret tok.lexeme
+    )
+
+    if(tok.kind == "NAME" || tok.kind == "ARR" || tok.kind == "STR_TYPE" || tok.kind == "INT_TYPE" || tok.kind == "FLT_TYPE" || tok.kind == "BOL_TYPE")(
+        ret tok.lexeme
+    )
+
+    ret tokenText(tok)
+)
+
+FN parseExpression(REF[Cursor.State] state) -> Ast.Expr = (
+    ret parseExpressionWithPrecedence(state, 1)
+)
+
+FN parseExpressionList(REF[Cursor.State] state, STR closeKind) -> Ast.ExprList = (
+    items = []
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, closeKind))(
+        Cursor.skipNewlines(state)
+
+        if(Cursor.at(state, closeKind))(
+            ret items
+        )
+
+        Ast.Expr item = parseExpression(state)
+        *items.add(item)
+        Cursor.skipNewlines(state)
+
+        if(Cursor.match(state, "COMMA"))(
+            Cursor.skipNewlines(state)
+        )
+    )
+
+    Cursor.expect(state, closeKind, "expected expression list close")
+    ret items
+)
+
+FN parseArrayLiteral(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token start = Cursor.expect(state, "LBRACKET", "expected '['")
+    Ast.ExprList items = parseExpressionList(state, "RBRACKET")
+
+    ret Ast.Expr({
+        kind = "array",
+        children = items,
+        span = start.span
+    })
+)
+
+FN parseRecordField(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token start = Cursor.current(state)
+    key = ""
+
+    if(Cursor.at(state, "STRING_LITERAL") || Cursor.at(state, "NAME"))(
+        Token.Token name = Cursor.advance(state)
+        key = name.lexeme
+    ) else (
+        Ast.Expr computed = parseExpression(state)
+        key = computed.text
+    )
+
+    if(Cursor.match(state, "EQUAL"))(
+        Ast.Expr value = parseExpression(state)
+        items = []
+        *items.add(value)
+
+        ret Ast.Expr({
+            kind = "field",
+            text = key,
+            children = items,
+            span = start.span
+        })
+    )
+
+    items = []
+    ret Ast.Expr({
+        kind = "field",
+        text = key,
+        children = items,
+        span = start.span
+    })
+)
+
+FN parseRecordLiteral(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token start = Cursor.expect(state, "LBRACE", "expected '{'")
+    items = []
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, "RBRACE"))(
+        Cursor.skipNewlines(state)
+
+        if(Cursor.at(state, "RBRACE"))(
+            ret Ast.Expr({
+                kind = "record",
+                children = items,
+                span = start.span
+            })
+        )
+
+        Ast.Expr field = parseRecordField(state)
+        *items.add(field)
+        Cursor.skipNewlines(state)
+
+        if(Cursor.match(state, "COMMA"))(
+            Cursor.skipNewlines(state)
+        )
+    )
+
+    Cursor.expect(state, "RBRACE", "expected '}' after record")
+    ret Ast.Expr({
+        kind = "record",
+        children = items,
+        span = start.span
+    })
+)
+
+FN parseCallArgs(REF[Cursor.State] state) -> Ast.ExprList = (
+    Cursor.expect(state, "LPAREN", "expected '('")
+    ret parseExpressionList(state, "RPAREN")
+)
+
+FN parseImplicitDot(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token start = Cursor.expect(state, "DOT", "expected '.'")
+
+    if(Cursor.match(state, "LBRACKET"))(
+        Ast.Expr index = parseExpression(state)
+        Cursor.expect(state, "RBRACKET", "expected ']' after computed access")
+        items = []
+        *items.add(index)
+        ret Ast.Expr({
+            kind = "implicit_index",
+            children = items,
+            span = start.span
+        })
+    )
+
+    Token.Token member = Cursor.advance(state)
+    items = []
+    ret Ast.Expr({
+        kind = "implicit_dot",
+        text = memberText(member),
+        children = items,
+        span = start.span
+    })
+)
+
+FN parsePrimary(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token tok = Cursor.current(state)
+
+    if(tok.kind == "INT_LITERAL")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "int",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "FLT_LITERAL")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "flt",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "STRING_LITERAL")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "str",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "BOL_LITERAL")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "bol",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "NUL")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "nul",
+            text = "NUL",
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "INIT")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "init",
+            text = "INIT",
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "NAME")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "name",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "INT_TYPE" || tok.kind == "FLT_TYPE" || tok.kind == "BOL_TYPE" || tok.kind == "STR_TYPE" || tok.kind == "DYN_TYPE" || tok.kind == "ARR")(
+        Cursor.advance(state)
+        ret Ast.Expr({
+            kind = "name",
+            text = tok.lexeme,
+            span = tok.span
+        })
+    )
+
+    if(tok.kind == "DOT")(
+        ret parseImplicitDot(state)
+    )
+
+    if(tok.kind == "LBRACKET")(
+        ret parseArrayLiteral(state)
+    )
+
+    if(tok.kind == "LBRACE")(
+        ret parseRecordLiteral(state)
+    )
+
+    if(tok.kind == "LPAREN")(
+        Cursor.advance(state)
+        Ast.Expr inner = parseExpression(state)
+        Cursor.expect(state, "RPAREN", "expected ')' after expression")
+        items = []
+        *items.add(inner)
+        ret Ast.Expr({
+            kind = "group",
+            children = items,
+            span = tok.span
+        })
+    )
+
+    Cursor.addError(state, tok, "expected expression")
+
+    if(!Cursor.atEnd(state))(
+        Cursor.advance(state)
+    )
+
+    ret Ast.Expr({
+        kind = "missing",
+        text = tokenText(tok),
+        span = tok.span
+    })
+)
+
+FN parseUnary(REF[Cursor.State] state) -> Ast.Expr = (
+    Token.Token tok = Cursor.current(state)
+
+    if(tok.kind == "BANG" || tok.kind == "MINUS" || tok.kind == "STAR" || tok.kind == "REF" || tok.kind == "HOLD" || tok.kind == "PLUSEQ" || tok.kind == "MINUSEQ")(
+        Cursor.advance(state)
+        Ast.Expr right = parseUnary(state)
+        items = []
+        *items.add(right)
+
+        ret Ast.Expr({
+            kind = "unary",
+            op = tokenText(tok),
+            children = items,
+            span = tok.span
+        })
+    )
+
+    Ast.Expr primary = parsePrimary(state)
+    ret parsePostfix(state, primary)
+)
+
+FN parsePostfix(REF[Cursor.State] state, Ast.Expr base) -> Ast.Expr = (
+    out = base
+
+    loop(!Cursor.atEnd(state))(
+        if(Cursor.at(state, "LPAREN"))(
+            Token.Token start = Cursor.current(state)
+            items = []
+            *items.add(out)
+            Ast.ExprList args = parseCallArgs(state)
+
+            loop([args])(
+                *items.add(e)
+            )
+
+            out = Ast.Expr({
+                kind = "call",
+                children = items,
+                span = start.span
+            })
+        ) elx(Cursor.at(state, "DOT"))(
+            Token.Token dot = Cursor.advance(state)
+
+            if(Cursor.match(state, "LBRACKET"))(
+                Ast.Expr index = parseExpression(state)
+                Cursor.expect(state, "RBRACKET", "expected ']' after computed access")
+                items = []
+                *items.add(out)
+                *items.add(index)
+                out = Ast.Expr({
+                    kind = "index",
+                    children = items,
+                    span = dot.span
+                })
+            ) else (
+                Token.Token member = Cursor.advance(state)
+                items = []
+                *items.add(out)
+                out = Ast.Expr({
+                    kind = "dot",
+                    text = memberText(member),
+                    children = items,
+                    span = dot.span
+                })
+            )
+        ) else (
+            ret out
+        )
+    )
+
+    ret out
+)
+
+FN parseExpressionWithPrecedence(REF[Cursor.State] state, INT minPrecedence) -> Ast.Expr = (
+    Ast.Expr left = parseUnary(state)
+
+    loop(!Cursor.atEnd(state))(
+        Token.Token op = Cursor.current(state)
+        INT prec = precedence(op.kind)
+
+        if(prec == 0 || prec < minPrecedence || isExpressionBoundary(op.kind))(
+            ret left
+        )
+
+        Cursor.advance(state)
+        Ast.Expr right = parseExpressionWithPrecedence(state, prec + 1)
+        items = []
+        *items.add(left)
+        *items.add(right)
+        left = Ast.Expr({
+            kind = "binary",
+            op = binaryOp(op.kind),
+            children = items,
+            span = op.span
+        })
+    )
+
+    ret left
+)

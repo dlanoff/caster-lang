@@ -1,0 +1,92 @@
+use IO
+
+MAP Diagnostic = {
+    STR file = "",
+    INT line = 1,
+    INT col = 1,
+    INT endLine = 1,
+    INT endCol = 1,
+    STR severity = "error",
+    STR message = ""
+}
+
+ARR[Diagnostic] DiagnosticList = []
+
+FN emptyList() -> DiagnosticList = (
+    ret []
+)
+
+FN diagnostic(STR file, INT line, INT col, INT endLine, INT endCol, STR severity, STR message) -> Diagnostic = (
+    ret {
+        file = file,
+        line = line,
+        col = col,
+        endLine = endLine,
+        endCol = endCol,
+        severity = severity,
+        message = message
+    }
+)
+
+FN formatDiagnostic(Diagnostic item) -> STR = (
+    ret item.file + ":" + STR(item.line) + ":" + STR(item.col) + ": " + item.severity + ": " + item.message
+)
+
+FN printDiagnostics(DiagnosticList diagnostics) -> NUL = (
+    loop([diagnostics])(
+        IO.error(formatDiagnostic(e))
+    )
+)
+
+FN jsonEscape(STR text) -> STR = (
+    out = ""
+    chars = text.ARR()
+
+    loop([chars])(
+        if(e == `"`)(
+            out += `\"`
+        ) elx(e == `\`)(
+            out += `\\`
+        ) elx(e == "\n")(
+            out += `\n`
+        ) elx(e == "\t")(
+            out += `\t`
+        ) else (
+            out += e
+        )
+    )
+
+    ret out
+)
+
+FN diagnosticJson(Diagnostic item) -> STR = (
+    out = `{`
+    out += `"file":"` + jsonEscape(item.file) + `",`
+    out += `"line":` + STR(item.line) + `,`
+    out += `"col":` + STR(item.col) + `,`
+    out += `"endLine":` + STR(item.endLine) + `,`
+    out += `"endCol":` + STR(item.endCol) + `,`
+    out += `"severity":"` + jsonEscape(item.severity) + `",`
+    out += `"message":"` + jsonEscape(item.message) + `"`
+    out += `}`
+
+    ret out
+)
+
+FN diagnosticsJson(DiagnosticList diagnostics) -> STR = (
+    out = "["
+
+    loop([diagnostics])(
+        if(i > 0)(
+            out += ","
+        )
+
+        out += diagnosticJson(e)
+    )
+
+    ret out + "]"
+)
+
+FN printDiagnosticsJson(DiagnosticList diagnostics) -> NUL = (
+    IO.print(diagnosticsJson(diagnostics))
+)

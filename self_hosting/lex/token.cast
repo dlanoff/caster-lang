@@ -1,0 +1,31 @@
+MAP Span = {
+    INT line = 1,
+    INT col = 1,
+    INT endLine = 1,
+    INT endCol = 1
+}
+
+MAP Token = {
+    STR kind = "",
+    STR lexeme = "",
+    Span span = INIT
+}
+
+ARR[Token] TokenList = []
+
+FN makeSpan(INT line, INT col, INT endLine, INT endCol) -> Span = (
+    ret {
+        line = line,
+        col = col,
+        endLine = endLine,
+        endCol = endCol
+    }
+)
+
+FN makeToken(STR kind, STR lexeme, INT line, INT col, INT endLine, INT endCol) -> Token = (
+    ret {
+        kind = kind,
+        lexeme = lexeme,
+        span = makeSpan(line, col, endLine, endCol)
+    }
+)

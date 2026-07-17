@@ -1,0 +1,389 @@
+use BUF
+use ./../ast/ast
+use ./arrays
+use ./expr
+use ./names
+use ./runtime
+
+FN cType(STR typeName) -> STR = (
+    ret Names.cTypeFor(typeName, "")
+)
+
+FN cFnName(Ast.FnDecl item) -> STR = (
+    ret Names.moduleName(item.module, item.name)
+)
+
+FN cTypeName(Ast.TypeDecl item) -> STR = (
+    ret Names.moduleName(item.module, item.name)
+)
+
+FN emitIndent(REF[BUF.Buffer] buf, INT indent) -> NUL = (
+    loop(indent)(
+        BUF.write(buf, " ")
+    )
+)
+
+FN emitParamList(REF[BUF.Buffer] buf, Ast.ParamDeclList params, STR module) -> NUL = (
+    first = true
+
+    loop([params])(
+        if(!first)(
+            BUF.write(buf, ", ")
+        )
+
+        BUF.write(buf, Names.cTypeFor(e.typeName, module))
+        BUF.write(buf, " ")
+        BUF.write(buf, Names.cName(e.name))
+        first = false
+    )
+)
+
+FN emitStructForwards(REF[BUF.Buffer] buf, Ast.TypeDeclList types) -> NUL = (
+    loop([types])(
+        if(e.kind == "MAP")(
+            BUF.write(buf, "typedef struct ")
+            BUF.write(buf, cTypeName(e))
+            BUF.write(buf, " ")
+            BUF.write(buf, cTypeName(e))
+            BUF.line(buf, ";")
+        )
+    )
+
+    BUF.line(buf, "")
+)
+
+FN emitStructs(REF[BUF.Buffer] buf, Ast.TypeDeclList types) -> NUL = (
+    loop([types])(
+        if(e.kind == "MAP")(
+            BUF.write(buf, "struct ")
+            BUF.write(buf, cTypeName(e))
+            BUF.line(buf, " {")
+            ownerModule = e.module
+
+            loop([e.fields])(
+                BUF.write(buf, "    ")
+                BUF.write(buf, Names.cTypeFor(e.typeName, ownerModule))
+                BUF.write(buf, " ")
+                BUF.write(buf, Names.cName(e.name))
+                BUF.line(buf, ";")
+            )
+
+            BUF.line(buf, "};")
+            BUF.line(buf, "")
+        )
+    )
+)
+
+FN emitFunctionPrototype(REF[BUF.Buffer] buf, Ast.FnDecl item) -> NUL = (
+    if(item.name == "main")(
+        BUF.line(buf, "int main(int argc, char **argv);")
+        ret
+    )
+
+    BUF.write(buf, Names.cTypeFor(item.returnType, item.module))
+    BUF.write(buf, " ")
+    BUF.write(buf, cFnName(item))
+    BUF.write(buf, "(")
+    emitParamList(buf, item.params, item.module)
+    BUF.line(buf, ");")
+)
+
+FN emitFunctionPrototypes(REF[BUF.Buffer] buf, Ast.FnDeclList functions) -> NUL = (
+    loop([functions])(
+        emitFunctionPrototype(buf, e)
+    )
+
+    BUF.line(buf, "")
+)
+
+FN emitStatement(REF[BUF.Buffer] buf, Ast.Stmt item, INT indent, STR module, STR returnType, Names.FunctionTable functions, REF[Names.StringList] locals, REF[Names.StringList] localTypes) -> NUL = (
+    if(item.kind == "var")(
+        emitIndent(buf, indent)
+        BUF.write(buf, Names.cTypeFor(item.typeName, module))
+        BUF.write(buf, " ")
+        BUF.write(buf, Names.cName(item.name))
+        Names.rememberLocal(locals, localTypes, item.name, item.typeName)
+
+        if(item.value.kind != "")(
+            BUF.write(buf, " = ")
+            Expr.emitExprExpected(buf, item.value, module, functions, item.typeName, locals, localTypes)
+        )
+
+        BUF.line(buf, ";")
+        ret
+    )
+
+    if(item.kind == "assign")(
+        emitIndent(buf, indent)
+
+        if(item.op == "=" && item.target.kind == "name" && Expr.isInitCall(item.value))(
+            BUF.write(buf, Names.cTypeFor(Expr.initCallType(item.value), module))
+            BUF.write(buf, " ")
+            BUF.write(buf, Names.cName(item.target.text))
+            BUF.write(buf, " = ")
+            Expr.emitExpr(buf, item.value, module, functions, locals, localTypes)
+            BUF.line(buf, ";")
+            Names.rememberLocal(locals, localTypes, item.target.text, Expr.initCallType(item.value))
+            ret
+        )
+
+        if(item.op == "=" && item.target.kind == "name" && Names.localType(locals, localTypes, item.target.text) == "")(
+            STR expected = Names.localArrayExpectedType(item.target.text, module)
+
+            if(expected != "" && item.value.kind == "array")(
+                BUF.write(buf, Names.cTypeFor(expected, module))
+                BUF.write(buf, " ")
+                BUF.write(buf, Names.cName(item.target.text))
+                BUF.write(buf, " = ")
+                Expr.emitExprExpected(buf, item.value, module, functions, expected, locals, localTypes)
+                BUF.line(buf, ";")
+                Names.rememberLocal(locals, localTypes, item.target.text, expected)
+                ret
+            )
+
+            BUF.write(buf, "__auto_type ")
+            BUF.write(buf, Names.cName(item.target.text))
+            BUF.write(buf, " = ")
+            Expr.emitExpr(buf, item.value, module, functions, locals, localTypes)
+            BUF.line(buf, ";")
+            Names.rememberLocal(locals, localTypes, item.target.text, Names.exprType(item.value, locals, localTypes, module))
+            ret
+        )
+
+        if(item.op == "+=" && Names.exprType(item.target, locals, localTypes, module) == "STR")(
+            Expr.emitTarget(buf, item.target, module, functions, locals, localTypes)
+            BUF.write(buf, " = flx_str_concat(")
+            Expr.emitExpr(buf, item.target, module, functions, locals, localTypes)
+            BUF.write(buf, ", ")
+            Expr.emitExpr(buf, item.value, module, functions, locals, localTypes)
+            BUF.line(buf, ");")
+            ret
+        )
+
+        Expr.emitTarget(buf, item.target, module, functions, locals, localTypes)
+        BUF.write(buf, " ")
+        BUF.write(buf, item.op)
+
+        if(item.op != "++")(
+            BUF.write(buf, " ")
+            Expr.emitExpr(buf, item.value, module, functions, locals, localTypes)
+        )
+
+        BUF.line(buf, ";")
+        ret
+    )
+
+    if(item.kind == "expr")(
+        emitIndent(buf, indent)
+
+        if(item.value.kind == "unary" && item.value.op == "*" && len(item.value.children) > 0 && Expr.emitArrayAddCall(buf, item.value.children.0, module, functions, locals, localTypes, true))(
+            BUF.line(buf, ";")
+            ret
+        )
+
+        Expr.emitExpr(buf, item.value, module, functions, locals, localTypes)
+        BUF.line(buf, ";")
+        ret
+    )
+
+    if(item.kind == "ret")(
+        emitIndent(buf, indent)
+        BUF.write(buf, "return")
+
+        if(item.value.kind != "")(
+            BUF.write(buf, " ")
+            Expr.emitExprExpected(buf, item.value, module, functions, returnType, locals, localTypes)
+        )
+
+        BUF.line(buf, ";")
+        ret
+    )
+
+    if(item.kind == "if")(
+        emitIndent(buf, indent)
+        BUF.write(buf, "if (")
+        Expr.emitExpr(buf, item.condition, module, functions, locals, localTypes)
+        BUF.line(buf, ") {")
+        Names.StringList thenLocals = Names.copyStringList(locals)
+        Names.StringList thenTypes = Names.copyStringList(localTypes)
+
+        loop([item.body])(
+            emitStatement(buf, e, indent + 4, module, returnType, functions, REF thenLocals, REF thenTypes)
+        )
+
+        emitIndent(buf, indent)
+        BUF.line(buf, "}")
+
+        loop([item.elseBody])(
+            if(e.kind == "elx")(
+                emitIndent(buf, indent)
+                BUF.write(buf, "else if (")
+                Expr.emitExpr(buf, e.condition, module, functions, locals, localTypes)
+                BUF.line(buf, ") {")
+                Names.StringList branchLocals = Names.copyStringList(locals)
+                Names.StringList branchTypes = Names.copyStringList(localTypes)
+
+                loop([e.body])(
+                    emitStatement(buf, e, indent + 4, module, returnType, functions, REF branchLocals, REF branchTypes)
+                )
+
+                emitIndent(buf, indent)
+                BUF.line(buf, "}")
+            ) elx(e.kind == "else")(
+                emitIndent(buf, indent)
+                BUF.line(buf, "else {")
+                Names.StringList branchLocals = Names.copyStringList(locals)
+                Names.StringList branchTypes = Names.copyStringList(localTypes)
+
+                loop([e.body])(
+                    emitStatement(buf, e, indent + 4, module, returnType, functions, REF branchLocals, REF branchTypes)
+                )
+
+                emitIndent(buf, indent)
+                BUF.line(buf, "}")
+            )
+        )
+
+        ret
+    )
+
+    if(item.kind == "loop")(
+        emitIndent(buf, indent)
+
+        if(item.source.kind == "array" && len(item.source.children) == 1)(
+            STR sourceType = Names.exprType(item.source.children.0, locals, localTypes, module)
+            STR elementType = Names.arrayElementForAlias(sourceType, module)
+            Names.StringList loopLocals = Names.copyStringList(locals)
+            Names.StringList loopTypes = Names.copyStringList(localTypes)
+            BUF.line(buf, "{")
+            emitIndent(buf, indent + 4)
+            BUF.write(buf, "__auto_type __caster_loop_src = ")
+            Expr.emitExpr(buf, item.source.children.0, module, functions, locals, localTypes)
+            BUF.line(buf, ";")
+            emitIndent(buf, indent + 4)
+            Names.shadowLocal(REF loopLocals, REF loopTypes, "i", "INT")
+            Names.shadowLocal(REF loopLocals, REF loopTypes, "e", elementType)
+            BUF.line(buf, "for (int64_t i = 0; i < __caster_loop_src.len; i++) {")
+            emitIndent(buf, indent + 8)
+            BUF.line(buf, "__auto_type e = __caster_loop_src.data[i];")
+
+            loop([item.body])(
+                emitStatement(buf, e, indent + 8, module, returnType, functions, REF loopLocals, REF loopTypes)
+            )
+
+            emitIndent(buf, indent + 4)
+            BUF.line(buf, "}")
+            emitIndent(buf, indent)
+            BUF.line(buf, "}")
+            ret
+        )
+
+        if(item.source.kind == "int" || item.source.kind == "name" || item.source.kind == "dot")(
+            Names.StringList loopLocals = Names.copyStringList(locals)
+            Names.StringList loopTypes = Names.copyStringList(localTypes)
+            Names.shadowLocal(REF loopLocals, REF loopTypes, "i", "INT")
+            BUF.write(buf, "for (int64_t i = 0; i < ")
+            Expr.emitExpr(buf, item.source, module, functions, locals, localTypes)
+            BUF.line(buf, "; i++) {")
+
+            loop([item.body])(
+                emitStatement(buf, e, indent + 4, module, returnType, functions, REF loopLocals, REF loopTypes)
+            )
+
+            emitIndent(buf, indent)
+            BUF.line(buf, "}")
+            ret
+        )
+
+        BUF.write(buf, "while (")
+        Expr.emitExpr(buf, item.source, module, functions, locals, localTypes)
+        BUF.line(buf, ") {")
+        Names.StringList loopLocals = Names.copyStringList(locals)
+        Names.StringList loopTypes = Names.copyStringList(localTypes)
+
+        loop([item.body])(
+            emitStatement(buf, e, indent + 4, module, returnType, functions, REF loopLocals, REF loopTypes)
+        )
+
+        emitIndent(buf, indent)
+        BUF.line(buf, "}")
+        ret
+    )
+
+    if(item.kind == "pass")(
+        emitIndent(buf, indent)
+        BUF.line(buf, ";")
+        ret
+    )
+
+    emitIndent(buf, indent)
+    BUF.write(buf, "/* unsupported_stmt:")
+    BUF.write(buf, item.kind)
+    BUF.line(buf, " */")
+)
+
+FN emitFunction(REF[BUF.Buffer] buf, Ast.FnDecl item, Names.FunctionTable functions) -> NUL = (
+    if(item.name == "main")(
+        BUF.line(buf, "int main(int argc, char **argv) {")
+        BUF.line(buf, "    flx_argc = argc;")
+        BUF.line(buf, "    flx_argv = argv;")
+    ) else (
+        BUF.write(buf, Names.cTypeFor(item.returnType, item.module))
+        BUF.write(buf, " ")
+        BUF.write(buf, cFnName(item))
+        BUF.write(buf, "(")
+        emitParamList(buf, item.params, item.module)
+        BUF.line(buf, ") {")
+    )
+
+    Names.StringList locals = Names.emptyStringList()
+    Names.StringList localTypes = Names.emptyStringList()
+
+    loop([item.params])(
+        Names.rememberLocal(REF locals, REF localTypes, e.name, e.typeName)
+    )
+
+    loop([item.statements])(
+        emitStatement(buf, e, 4, item.module, item.returnType, functions, REF locals, REF localTypes)
+    )
+
+    if(item.name == "main")(
+        BUF.line(buf, "    return 0;")
+    )
+
+    BUF.line(buf, "}")
+    BUF.line(buf, "")
+)
+
+FN emitProgramC(Ast.Program program) -> STR = (
+    buf = BUF.new()
+    Names.FunctionTable functions = Names.buildFunctionTable(program)
+
+    BUF.line(REF buf, "#include <stdbool.h>")
+    BUF.line(REF buf, "#include <stdint.h>")
+    BUF.line(REF buf, "#include <stdio.h>")
+    BUF.line(REF buf, "#include <stdlib.h>")
+    BUF.line(REF buf, "#include <string.h>")
+    BUF.line(REF buf, "")
+    BUF.line(REF buf, "typedef struct { const char *data; int64_t len; } FLX_STR;")
+    BUF.line(REF buf, "typedef struct { char *data; int64_t len; int64_t cap; } Buffer;")
+    BUF.line(REF buf, "typedef struct { FLX_STR *data; int64_t len; int64_t cap; } ARR_STR;")
+    BUF.line(REF buf, "")
+
+    emitStructForwards(REF buf, program.types)
+    Arrays.emitArrayTypes(REF buf, program)
+    Arrays.emitArrayAliases(REF buf, program.types)
+    Runtime.emitRuntime(REF buf)
+    emitStructs(REF buf, program.types)
+    Arrays.emitArrayHelpers(REF buf, program.types)
+    emitFunctionPrototypes(REF buf, program.functions)
+
+    loop([program.functions])(
+        emitFunction(REF buf, e, functions)
+    )
+
+    out = BUF.toStr(buf)
+    BUF.free(REF buf)
+
+    ret out
+)

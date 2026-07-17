@@ -1,0 +1,232 @@
+use BUF
+use ./../ast/ast
+use ./../features/feature
+use ./../driver/source
+use ./../lex/token
+
+FN emitFeatureLine(REF[BUF.Buffer] buf, Feature.FeatureRule rule) -> NUL = (
+    BUF.line(buf, Feature.describe(rule))
+)
+
+FN emitUseLine(REF[BUF.Buffer] buf, Ast.UseDecl item) -> NUL = (
+    BUF.write(buf, "use ")
+    BUF.write(buf, item.path)
+
+    if(item.native)(
+        BUF.line(buf, " native")
+    ) else (
+        BUF.line(buf, " local")
+    )
+)
+
+FN emitFieldLine(REF[BUF.Buffer] buf, Ast.FieldDecl item) -> NUL = (
+    BUF.write(buf, "    ")
+    BUF.write(buf, item.typeName)
+    BUF.write(buf, " ")
+    BUF.write(buf, item.name)
+
+    if(item.initializer != "")(
+        BUF.write(buf, " = ")
+        BUF.write(buf, item.initializer)
+    )
+
+    BUF.line(buf, "")
+)
+
+FN emitTypeLine(REF[BUF.Buffer] buf, Ast.TypeDecl item) -> NUL = (
+    BUF.write(buf, item.kind)
+    BUF.write(buf, " ")
+    BUF.write(buf, item.name)
+
+    if(item.typeName != "")(
+        BUF.write(buf, " : ")
+        BUF.write(buf, item.typeName)
+    )
+
+    if(item.initializer != "")(
+        BUF.write(buf, " = ")
+        BUF.write(buf, item.initializer)
+    )
+
+    BUF.line(buf, "")
+
+    loop([item.fields])(
+        emitFieldLine(buf, e)
+    )
+)
+
+FN emitParamList(REF[BUF.Buffer] buf, Ast.ParamDeclList params) -> NUL = (
+    first = true
+
+    loop([params])(
+        if(!first)(
+            BUF.write(buf, ", ")
+        )
+
+        BUF.write(buf, e.typeName)
+        BUF.write(buf, " ")
+        BUF.write(buf, e.name)
+        first = false
+    )
+)
+
+FN emitIndent(REF[BUF.Buffer] buf, INT width) -> NUL = (
+    loop(width)(
+        BUF.write(buf, " ")
+    )
+)
+
+FN emitExprInline(REF[BUF.Buffer] buf, Ast.Expr item) -> NUL = (
+    if(item.kind == "")(
+        BUF.write(buf, "<none>")
+        ret
+    )
+
+    BUF.write(buf, item.kind)
+
+    if(item.text != "")(
+        BUF.write(buf, ":")
+        BUF.write(buf, item.text)
+    )
+
+    if(item.op != "")(
+        BUF.write(buf, ":")
+        BUF.write(buf, item.op)
+    )
+
+    if(len(item.children) > 0)(
+        BUF.write(buf, "(")
+        first = true
+
+        loop([item.children])(
+            if(!first)(
+                BUF.write(buf, ", ")
+            )
+
+            emitExprInline(buf, e)
+            first = false
+        )
+
+        BUF.write(buf, ")")
+    )
+)
+
+FN emitStmtLine(REF[BUF.Buffer] buf, Ast.Stmt item, INT indent) -> NUL = (
+    emitIndent(buf, indent)
+    BUF.write(buf, item.kind)
+
+    if(item.name != "")(
+        BUF.write(buf, " ")
+        BUF.write(buf, item.name)
+    )
+
+    if(item.typeName != "")(
+        BUF.write(buf, " : ")
+        BUF.write(buf, item.typeName)
+    )
+
+    if(item.op != "")(
+        BUF.write(buf, " ")
+        BUF.write(buf, item.op)
+    )
+
+    if(item.condition.kind != "")(
+        BUF.write(buf, " condition=")
+        emitExprInline(buf, item.condition)
+    )
+
+    if(item.target.kind != "")(
+        BUF.write(buf, " target=")
+        emitExprInline(buf, item.target)
+    )
+
+    if(item.source.kind != "")(
+        BUF.write(buf, " source=")
+        emitExprInline(buf, item.source)
+    )
+
+    if(item.value.kind != "")(
+        BUF.write(buf, " value=")
+        emitExprInline(buf, item.value)
+    )
+
+    if(len(item.params) > 0)(
+        BUF.write(buf, " params=(")
+        emitParamList(buf, item.params)
+        BUF.write(buf, ")")
+    )
+
+    if(item.returnType != "NUL")(
+        BUF.write(buf, " -> ")
+        BUF.write(buf, item.returnType)
+    )
+
+    BUF.line(buf, "")
+
+    loop([item.body])(
+        emitStmtLine(buf, e, indent + 4)
+    )
+
+    loop([item.elseBody])(
+        emitStmtLine(buf, e, indent + 4)
+    )
+)
+
+FN emitFnLine(REF[BUF.Buffer] buf, Ast.FnDecl item) -> NUL = (
+    BUF.write(buf, "FN ")
+    BUF.write(buf, item.name)
+    BUF.write(buf, "(")
+    emitParamList(buf, item.params)
+    BUF.write(buf, ") -> ")
+    BUF.write(buf, item.returnType)
+    BUF.write(buf, " statements=")
+    BUF.line(buf, item.bodyTokens)
+
+    loop([item.statements])(
+        emitStmtLine(buf, e, 4)
+    )
+)
+
+FN emitProgramSummary(Source.SourceFile source, Ast.Program program, Token.TokenList tokens, Feature.FeatureSet features) -> STR = (
+    buf = BUF.new()
+
+    BUF.line(REF buf, "/* Caster self-hosting phase 2 front end */")
+    BUF.write(REF buf, "source: ")
+    BUF.line(REF buf, source.path)
+    BUF.write(REF buf, "features: ")
+    BUF.line(REF buf, len(features.rules))
+    BUF.write(REF buf, "tokens: ")
+    BUF.line(REF buf, len(tokens))
+    BUF.line(REF buf, "")
+
+    loop([features.rules])(
+        emitFeatureLine(REF buf, e)
+    )
+
+    BUF.line(REF buf, "")
+
+    BUF.write(REF buf, "uses: ")
+    BUF.line(REF buf, len(program.uses))
+    loop([program.uses])(
+        emitUseLine(REF buf, e)
+    )
+
+    BUF.line(REF buf, "")
+    BUF.write(REF buf, "types: ")
+    BUF.line(REF buf, len(program.types))
+    loop([program.types])(
+        emitTypeLine(REF buf, e)
+    )
+
+    BUF.line(REF buf, "")
+    BUF.write(REF buf, "functions: ")
+    BUF.line(REF buf, len(program.functions))
+    loop([program.functions])(
+        emitFnLine(REF buf, e)
+    )
+
+    out = BUF.toStr(buf)
+    BUF.free(REF buf)
+
+    ret out
+)

@@ -1,0 +1,23 @@
+use BUF
+use ./writer
+
+FN emitCoreAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static int flx_argc = 0;`)
+    Writer.lineC(buf, `static char **flx_argv = NULL;`)
+    BUF.line(buf, "")
+    Writer.lineC(buf, `static FLX_STR flx_str_lit(const char *data, int64_t len) { return (FLX_STR){ data, len }; }`)
+    Writer.lineC(buf, `static FLX_STR flx_str_copy(const char *data, int64_t len) { char *out = malloc((size_t)len + 1); if (!out) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } memcpy(out, data, (size_t)len); out[len] = 0; return (FLX_STR){ out, len }; }`)
+    Writer.lineC(buf, `static char *flx_str_to_c(FLX_STR text) { char *out = malloc((size_t)text.len + 1); if (!out) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } memcpy(out, text.data, (size_t)text.len); out[text.len] = 0; return out; }`)
+    Writer.lineC(buf, `static bool flx_str_eq(FLX_STR a, FLX_STR b) { return a.len == b.len && memcmp(a.data, b.data, (size_t)a.len) == 0; }`)
+    Writer.lineC(buf, `static FLX_STR flx_str_concat(FLX_STR a, FLX_STR b) { char *out = malloc((size_t)(a.len + b.len) + 1); if (!out) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } memcpy(out, a.data, (size_t)a.len); memcpy(out + a.len, b.data, (size_t)b.len); out[a.len + b.len] = 0; return (FLX_STR){ out, a.len + b.len }; }`)
+    Writer.lineC(buf, `static FLX_STR flx_str_from_int(int64_t value) { char tmp[64]; int n = snprintf(tmp, sizeof(tmp), "%lld", (long long)value); return flx_str_copy(tmp, n); }`)
+    Writer.lineC(buf, `static FLX_STR flx_str_at(FLX_STR text, int64_t index) { if (index < 0 || index >= text.len) return flx_str_lit("", 0); return flx_str_copy(text.data + index, 1); }`)
+    Writer.lineC(buf, `static ARR_STR ARR_STR_add(ARR_STR src, FLX_STR value) { int64_t cap = src.cap > src.len ? src.cap : src.len; if (cap < src.len + 1) cap = cap == 0 ? 4 : cap * 2; FLX_STR *data = malloc(sizeof(FLX_STR) * (size_t)cap); if (!data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } if (src.len > 0 && src.data) memcpy(data, src.data, sizeof(FLX_STR) * (size_t)src.len); data[src.len] = value; return (ARR_STR){ data, src.len + 1, cap }; }`)
+    Writer.lineC(buf, `static ARR_STR flx_str_chars(FLX_STR text) { ARR_STR out = {0}; if (text.len <= 0) return out; out.data = malloc(sizeof(FLX_STR) * (size_t)text.len); if (!out.data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } out.len = text.len; out.cap = text.len; for (int64_t i = 0; i < text.len; i++) out.data[i] = flx_str_copy(text.data + i, 1); return out; }`)
+    Writer.lineC(buf, `static FLX_STR upper(FLX_STR text) { if (text.len == 0) return text; char c = text.data[0]; if (c >= 'a' && c <= 'z') c = (char)(c - 32); return flx_str_copy(&c, 1); }`)
+    Writer.lineC(buf, `static FLX_STR lower(FLX_STR text) { if (text.len == 0) return text; char c = text.data[0]; if (c >= 'A' && c <= 'Z') c = (char)(c + 32); return flx_str_copy(&c, 1); }`)
+    Writer.lineC(buf, `static bool isDigit(FLX_STR text) { return text.len == 1 && text.data[0] >= '0' && text.data[0] <= '9'; }`)
+    Writer.lineC(buf, `static bool isAlpha(FLX_STR text) { if (text.len != 1) return false; char c = text.data[0]; return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }`)
+    Writer.lineC(buf, `static bool isSpace(FLX_STR text) { return text.len == 1 && (text.data[0] == ' ' || text.data[0] == '\\t' || text.data[0] == '\\r' || text.data[0] == '\\n'); }`)
+    BUF.line(buf, "")
+)

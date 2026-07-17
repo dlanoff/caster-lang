@@ -1,0 +1,270 @@
+use WEB
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 8000
+    })
+
+    WEB.get(REF app, "/health", [], health)
+
+    WEB.get(REF app, "/accounts/:id", [], getAccount)
+    WEB.get(REF app, "/accounts/:id/balance", [], getBalance)
+    WEB.get(REF app, "/accounts/:id/transactions", [], getTransactions)
+
+    WEB.post(REF app, "/accounts/:id/transfers", [], postTransfer)
+    WEB.post(REF app, "/accounts/:id/batch-transfers", [], postBatchTransfers)
+
+    WEB.get(REF app, "/search/:prefix", [], searchAccounts)
+    WEB.get(REF app, "/compute/:id", [], computeHeavy)
+
+    WEB.listen(REF app)
+)
+
+FN accountSeed(STR id) -> INT = (
+    seed = 17
+
+    loop(id)(
+        seed = ((seed * 131) + i + len(id)) % 1000003
+    )
+
+    ret seed
+)
+
+FN fakeBalance(STR id) -> INT = (
+    seed = accountSeed(id)
+    balance = 100000 + seed
+
+    loop(250)(
+        balance = ((balance * 17) + seed + 91) % 10000000
+    )
+
+    ret balance
+)
+
+FN fakeRiskScore(STR id, INT amount) -> INT = (
+    seed = accountSeed(id)
+    score = seed + amount
+
+    loop(600)(
+        score = ((score * 31) + amount + 7) % 100000
+    )
+
+    ret score % 100
+)
+
+FN fakeLedgerChecksum(STR fromId, STR toId, INT amount) -> INT = (
+    checksum = accountSeed(fromId) + accountSeed(toId) + amount
+
+    loop(1200)(
+        checksum = ((checksum * 53) + amount + len(fromId) + len(toId)) % 1000000007
+    )
+
+    ret checksum
+)
+
+FN jsonText(STR body) -> WEB.Res = (
+    ret {
+        status = 200,
+        body = body,
+        headers = {
+            "content-type" = "application/json"
+        }
+    }
+)
+
+FN health(REF[WEB.Req] req) -> WEB.Res = (
+    ret WEB.json({
+        ok = true,
+        service = "caster-bank",
+        status = "healthy"
+    })
+)
+
+FN getAccount(REF[WEB.Req] req) -> WEB.Res = (
+    id = req.params.id
+    balance = fakeBalance(id)
+    risk = fakeRiskScore(id, 0)
+
+    ret WEB.json({
+        id = id,
+        kind = "checking",
+        currency = "USD",
+        balance = balance,
+        risk = risk,
+        active = true
+    })
+)
+
+FN getBalance(REF[WEB.Req] req) -> WEB.Res = (
+    id = req.params.id
+    balance = fakeBalance(id)
+
+    ret WEB.json({
+        id = id,
+        balance = balance,
+        available = balance - 2500,
+        currency = "USD"
+    })
+)
+
+FN getTransactions(REF[WEB.Req] req) -> WEB.Res = (
+    id = req.params.id
+    seed = accountSeed(id)
+
+    credits = 0
+    debits = 0
+    largest = 0
+    checksum = seed
+
+    loop(1000)(
+        amount = ((seed + i * 37) % 50000) + 1
+
+        if(i % 2 == 0)(
+            credits += amount
+        )else(
+            debits += amount
+        )
+
+        if(amount > largest)(
+            largest = amount
+        )
+
+        checksum = ((checksum * 29) + amount + i) % 1000000007
+    )
+
+    ret WEB.json({
+        id = id,
+        count = 1000,
+        credits = credits,
+        debits = debits,
+        largest = largest,
+        checksum = checksum
+    })
+)
+
+FN postTransfer(REF[WEB.Req] req) -> WEB.Res = (
+    body = JSON(req.body)
+
+    fromId = req.params.id
+    toId = body.to else "unknown"
+    amount = body.amount else 0
+
+    if(amount <= 0)(
+        ret WEB.json({
+            error = "amount must be positive"
+        }, 400)
+    )
+
+    balance = fakeBalance(fromId)
+
+    if(amount > balance)(
+        ret WEB.json({
+            error = "insufficient funds",
+            balance = balance,
+            amount = amount
+        }, 409)
+    )
+
+    risk = fakeRiskScore(fromId, amount)
+    checksum = fakeLedgerChecksum(fromId, toId, amount)
+
+    if(risk > 92)(
+        ret WEB.json({
+            error = "transfer blocked by risk engine",
+            risk = risk,
+            checksum = checksum
+        }, 403)
+    )
+
+    ret WEB.json({
+        ok = true,
+        from = fromId,
+        to = toId,
+        amount = amount,
+        remaining = balance - amount,
+        risk = risk,
+        checksum = checksum
+    }, 201)
+)
+
+FN postBatchTransfers(REF[WEB.Req] req) -> WEB.Res = (
+    body = JSON(req.body)
+
+    fromId = req.params.id
+    count = body.count else 100
+    amount = body.amount else 25
+    toId = body.to else "batch-destination"
+
+    if(count <= 0)(
+        ret WEB.json({
+            error = "count must be positive"
+        }, 400)
+    )
+
+    accepted = 0
+    rejected = 0
+    checksum = 0
+
+    loop(count)(
+        nextAmount = amount + (i % 17)
+        risk = fakeRiskScore(fromId, nextAmount)
+
+        if(risk > 94)(
+            rejected += 1
+        )else(
+            accepted += 1
+        )
+
+        checksum += fakeLedgerChecksum(fromId, toId, nextAmount)
+        checksum = checksum % 1000000007
+    )
+
+    ret WEB.json({
+        ok = true,
+        from = fromId,
+        to = toId,
+        requested = count,
+        accepted = accepted,
+        rejected = rejected,
+        checksum = checksum
+    })
+)
+
+FN searchAccounts(REF[WEB.Req] req) -> WEB.Res = (
+    prefix = req.params.prefix
+
+    total = 0
+    checksum = accountSeed(prefix)
+
+    loop(2000)(
+        rowScore = ((checksum * 41) + i + len(prefix)) % 1000003
+
+        if(rowScore % 3 == 0)(
+            total += 1
+        )
+
+        checksum = rowScore
+    )
+
+    ret WEB.json({
+        prefix = prefix,
+        scanned = 2000,
+        matches = total,
+        checksum = checksum
+    })
+)
+
+FN computeHeavy(REF[WEB.Req] req) -> WEB.Res = (
+    seed = accountSeed(req.params.id)
+    value = seed
+
+    loop(10000)(
+        value = ((value * 67) + i + seed) % 1000000007
+    )
+
+    ret WEB.json({
+        id = req.params.id,
+        iterations = 10000,
+        result = value
+    })
+)

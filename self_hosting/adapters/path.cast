@@ -1,0 +1,10 @@
+use BUF
+use ./writer
+
+FN emitPathAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static FLX_STR PATH_normalize(FLX_STR path) { char *out = malloc((size_t)path.len + 1); if (!out) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } int64_t i = 0, j = 0; while (i < path.len) { if (i == 0 && i + 1 < path.len && path.data[i] == '.' && path.data[i + 1] == '/') { i += 2; continue; } if (path.data[i] == '/' && i + 2 < path.len && path.data[i + 1] == '.' && path.data[i + 2] == '/') { if (j == 0 || out[j - 1] != '/') out[j++] = '/'; i += 3; continue; } out[j++] = path.data[i++]; } out[j] = 0; return (FLX_STR){ out, j }; }`)
+    Writer.lineC(buf, `static FLX_STR PATH_parent(FLX_STR path) { int64_t last = -1; for (int64_t i = 0; i < path.len; i++) if (path.data[i] == '/') last = i; if (last <= 0) return flx_str_lit(".", 1); return flx_str_copy(path.data, last); }`)
+    Writer.lineC(buf, `static FLX_STR PATH_name(FLX_STR path) { int64_t last = -1; for (int64_t i = 0; i < path.len; i++) if (path.data[i] == '/') last = i; return flx_str_copy(path.data + last + 1, path.len - last - 1); }`)
+    Writer.lineC(buf, `static FLX_STR PATH_join(ARR_STR parts) { FLX_STR out = flx_str_lit("", 0); for (int64_t i = 0; i < parts.len; i++) { if (i > 0 && out.len > 0 && out.data[out.len - 1] != '/') out = flx_str_concat(out, flx_str_lit("/", 1)); out = flx_str_concat(out, parts.data[i]); } return out; }`)
+    BUF.line(buf, "")
+)

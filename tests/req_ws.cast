@@ -1,0 +1,10 @@
+FN main() -> NUL = (
+    REQ.ws(8081, echo)
+    REQ.wsTLS(8443, "cert.pem", "key.pem", echo)
+)
+
+use REQ
+
+FN echo(STR message) -> STR = (
+    ret message
+)

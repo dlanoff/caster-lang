@@ -1,0 +1,7 @@
+use BUF
+use ./writer
+
+FN emitIoAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static void IO_print(FLX_STR text) { fwrite(text.data, 1, (size_t)text.len, stdout); fputc('\\n', stdout); }`)
+    Writer.lineC(buf, `static void IO_error(FLX_STR text) { fwrite(text.data, 1, (size_t)text.len, stderr); fputc('\\n', stderr); }`)
+)

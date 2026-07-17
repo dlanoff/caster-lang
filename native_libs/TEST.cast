@@ -1,0 +1,11 @@
+FN greeting() -> STR = (
+    ret "hello from native"
+)
+
+FN join(STR left, STR right) -> STR = (
+    ret left + right
+)
+
+FN score() -> INT = (
+    ret 41
+)

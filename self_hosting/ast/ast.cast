@@ -1,0 +1,87 @@
+use ./../driver/diagnostics
+use ./../lex/token
+
+MAP UseDecl = {
+    STR path = "",
+    BOL native = true,
+    Token.Span span = INIT
+}
+
+ARR[UseDecl] UseDeclList = []
+
+MAP FieldDecl = {
+    STR name = "",
+    STR typeName = "",
+    STR initializer = "",
+    Token.Span span = INIT
+}
+
+ARR[FieldDecl] FieldDeclList = []
+
+MAP TypeDecl = {
+    STR kind = "",
+    STR name = "",
+    STR module = "",
+    STR typeName = "",
+    STR initializer = "",
+    FieldDeclList fields = INIT,
+    Token.Span span = INIT
+}
+
+ARR[TypeDecl] TypeDeclList = []
+
+MAP ParamDecl = {
+    STR name = "",
+    STR typeName = "",
+    Token.Span span = INIT
+}
+
+ARR[ParamDecl] ParamDeclList = []
+
+MAP Expr = {
+    STR kind = "",
+    STR text = "",
+    STR op = "",
+    ARR[Expr] children = [],
+    Token.Span span = INIT
+}
+
+ARR[Expr] ExprList = []
+
+MAP Stmt = {
+    STR kind = "",
+    STR name = "",
+    STR typeName = "",
+    STR op = "",
+    Expr value = INIT,
+    Expr target = INIT,
+    Expr condition = INIT,
+    Expr source = INIT,
+    ParamDeclList params = INIT,
+    STR returnType = "NUL",
+    ARR[Stmt] body = [],
+    ARR[Stmt] elseBody = [],
+    Token.Span span = INIT
+}
+
+ARR[Stmt] StmtList = []
+
+MAP FnDecl = {
+    STR name = "",
+    STR module = "",
+    ParamDeclList params = INIT,
+    STR returnType = "NUL",
+    STR body = "",
+    INT bodyTokens = 0,
+    StmtList statements = INIT,
+    Token.Span span = INIT
+}
+
+ARR[FnDecl] FnDeclList = []
+
+MAP Program = {
+    UseDeclList uses = INIT,
+    TypeDeclList types = INIT,
+    FnDeclList functions = INIT,
+    Diagnostics.DiagnosticList diagnostics = INIT
+}

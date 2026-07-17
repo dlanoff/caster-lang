@@ -1,0 +1,42 @@
+use FS
+
+MAP SourceFile = {
+    STR path = "",
+    STR text = ""
+}
+
+FN defaultSampleSource() -> STR = (
+    ret `use IO
+
+ARR[INT] Scores = []
+
+MAP Counter = {
+    INT value = 0,
+    STR label = "demo"
+}
+
+FN bump(REF[Counter] counter) -> NUL = (
+    *counter.value += 1
+)
+
+FN main() -> NUL = (
+    counter = Counter.INIT()
+    bump(REF counter)
+    IO.print(counter.value)
+)
+`
+)
+
+FN loadSource(STR path) -> SourceFile = (
+    if(path == "")(
+        ret {
+            path = "<sample>",
+            text = defaultSampleSource()
+        }
+    )
+
+    ret {
+        path = path,
+        text = FS.read(path)
+    }
+)

@@ -1,0 +1,22 @@
+use BUF
+
+FN writeCSource(REF[BUF.Buffer] buf, STR text) -> NUL = (
+    pos = 0
+
+    loop(pos < len(text))(
+        ch = text.pos
+
+        if(ch == `\` && pos + 1 < len(text) && text.[pos + 1] == `\`)(
+            BUF.write(buf, `\`)
+            pos += 2
+        ) else (
+            BUF.write(buf, ch)
+            pos += 1
+        )
+    )
+)
+
+FN lineC(REF[BUF.Buffer] buf, STR text) -> NUL = (
+    writeCSource(buf, text)
+    BUF.line(buf, "")
+)

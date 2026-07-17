@@ -1,0 +1,140 @@
+
+use BUF
+use ./../ast/ast
+use ./names
+use ./runtime
+
+FN emitArrayTypeOnce(REF[BUF.Buffer] buf, REF[Names.StringList] emitted, STR typeName, STR module) -> NUL = (
+    if(!Names.startsWith(typeName, "ARR["))(
+        ret
+    )
+
+    STR inner = Names.stripRef(typeName)
+
+    if(Names.startsWith(inner, "ARR["))(
+        emitArrayTypeOnce(buf, emitted, inner, module)
+    )
+
+    STR cname = Names.arrayTypeName(typeName, module)
+
+    if(cname == "ARR_STR")(
+        ret
+    )
+
+    if(Names.hasString(emitted, cname))(
+        ret
+    )
+
+    Names.rememberString(emitted, cname)
+    BUF.write(buf, "typedef struct { ")
+    BUF.write(buf, Names.cTypeFor(inner, module))
+    BUF.write(buf, " *data; int64_t len; int64_t cap; } ")
+    BUF.write(buf, cname)
+    BUF.line(buf, ";")
+)
+
+FN emitArrayTypesFromStmt(REF[BUF.Buffer] buf, REF[Names.StringList] emitted, Ast.Stmt item, STR module) -> NUL = (
+    emitArrayTypeOnce(buf, emitted, item.typeName, module)
+
+    loop([item.body])(
+        emitArrayTypesFromStmt(buf, emitted, e, module)
+    )
+
+    loop([item.elseBody])(
+        emitArrayTypesFromStmt(buf, emitted, e, module)
+    )
+)
+
+FN emitArrayTypes(REF[BUF.Buffer] buf, Ast.Program program) -> NUL = (
+    Names.StringList emitted = Names.emptyStringList()
+
+    loop([program.types])(
+        emitArrayTypeOnce(buf, REF emitted, e.typeName, e.module)
+        ownerModule = e.module
+
+        loop([e.fields])(
+            emitArrayTypeOnce(buf, REF emitted, e.typeName, ownerModule)
+        )
+    )
+
+    loop([program.functions])(
+        emitArrayTypeOnce(buf, REF emitted, e.returnType, e.module)
+        ownerModule = e.module
+
+        loop([e.params])(
+            emitArrayTypeOnce(buf, REF emitted, e.typeName, ownerModule)
+        )
+
+        loop([e.statements])(
+            emitArrayTypesFromStmt(buf, REF emitted, e, ownerModule)
+        )
+    )
+
+    if(len(emitted) > 0)(
+        BUF.line(buf, "")
+    )
+)
+
+FN emitArrayAliases(REF[BUF.Buffer] buf, Ast.TypeDeclList types) -> NUL = (
+    any = false
+
+    loop([types])(
+        if(e.kind != "MAP" && Names.startsWith(e.typeName, "ARR["))(
+            BUF.write(buf, "typedef ")
+            BUF.write(buf, Names.cTypeFor(e.typeName, e.module))
+            BUF.write(buf, " ")
+            BUF.write(buf, Names.moduleName(e.module, e.name))
+            BUF.line(buf, ";")
+            any = true
+        )
+    )
+
+    if(any)(
+        BUF.line(buf, "")
+    )
+)
+
+FN emitArrayAddHelper(REF[BUF.Buffer] buf, STR arrayType, STR module) -> NUL = (
+    STR elementType = Names.arrayElementForAlias(arrayType, module)
+
+    if(elementType == "")(
+        ret
+    )
+
+    STR arrayC = Names.cTypeFor(arrayType, module)
+    STR elementC = Names.cTypeFor(elementType, module)
+    BUF.write(buf, "static ")
+    BUF.write(buf, arrayC)
+    BUF.write(buf, " ")
+    BUF.write(buf, Names.arrayAddFnName(arrayType, module))
+    BUF.write(buf, "(")
+    BUF.write(buf, arrayC)
+    BUF.write(buf, " src, ")
+    BUF.write(buf, elementC)
+    BUF.line(buf, " value) {")
+    BUF.line(buf, "    int64_t cap = src.cap > src.len ? src.cap : src.len;")
+    BUF.line(buf, "    if (cap < src.len + 1) cap = cap == 0 ? 4 : cap * 2;")
+    BUF.write(buf, "    ")
+    BUF.write(buf, elementC)
+    BUF.write(buf, " *data = malloc(sizeof(")
+    BUF.write(buf, elementC)
+    BUF.line(buf, `) * (size_t)cap);`)
+    Runtime.lineC(buf, `    if (!data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); }`)
+    BUF.write(buf, "    if (src.len > 0 && src.data) memcpy(data, src.data, sizeof(")
+    BUF.write(buf, elementC)
+    BUF.line(buf, ") * (size_t)src.len);")
+    BUF.line(buf, "    data[src.len] = value;")
+    BUF.write(buf, "    return (")
+    BUF.write(buf, arrayC)
+    BUF.line(buf, "){ .data = data, .len = src.len + 1, .cap = cap };")
+    BUF.line(buf, "}")
+    BUF.line(buf, "")
+)
+
+FN emitArrayHelpers(REF[BUF.Buffer] buf, Ast.TypeDeclList types) -> NUL = (
+    loop([types])(
+        if(e.kind != "MAP" && Names.startsWith(e.typeName, "ARR["))(
+            emitArrayAddHelper(buf, e.name, e.module)
+        )
+    )
+)

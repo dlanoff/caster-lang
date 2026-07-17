@@ -1,0 +1,4 @@
+// SQL native adapter.
+//
+// Functions are provided by src/caster/adapters/sql.c and exposed as SQL.*.
+// DB is a small handle MAP. Exec reports changed rows and last insert id.

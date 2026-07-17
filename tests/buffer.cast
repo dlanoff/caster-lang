@@ -1,0 +1,60 @@
+use BUF
+
+FN testIntCast() -> NUL = (
+    assert(INT("42") == 42, "INT from STR")
+    assert(INT(4.8) == 4, "INT from FLT")
+    assert(INT(true) == 1, "INT from BOL")
+)
+
+FN testFltCast() -> NUL = (
+    value = FLT("2.5")
+
+    assert(value > 2.49 && value < 2.51, "FLT from STR")
+    assert(FLT(3) == 3.0, "FLT from INT")
+    assert(FLT(true) == 1.0, "FLT from BOL")
+)
+
+FN testStrCast() -> NUL = (
+    assert(STR(42) == "42", "STR from INT")
+    assert(STR(2.5) == "2.5", "STR from FLT")
+    assert(STR(false) == "false", "STR from BOL")
+)
+
+FN testBufferWrite() -> NUL = (
+    buf = BUF.new()
+
+    BUF.write(REF buf, "answer=")
+    BUF.write(REF buf, 42)
+    BUF.write(REF buf, " ok=")
+    BUF.write(REF buf, true)
+
+    assert(BUF.toStr(buf) == "answer=42 ok=true", "BUF.write")
+    assert(BUF.len(buf) == 17, "BUF.len")
+
+    BUF.line(REF buf, 2.5)
+
+    assert(BUF.toStr(buf) == `answer=42 ok=true2.5
+`, "BUF.line")
+
+    BUF.free(REF buf)
+)
+
+FN testBufferClear() -> NUL = (
+    buf = BUF.new()
+
+    BUF.write(REF buf, "temporary")
+    BUF.clear(REF buf)
+    BUF.write(REF buf, STR(7))
+    BUF.write(REF buf, "!")
+
+    assert(BUF.toStr(buf) == "7!", "BUF.clear reuse")
+    BUF.free(REF buf)
+)
+
+FN main() -> NUL = (
+    testIntCast()
+    testFltCast()
+    testStrCast()
+    testBufferWrite()
+    testBufferClear()
+)

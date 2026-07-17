@@ -1,0 +1,837 @@
+use ./../ast/ast
+use ./../driver/diagnostics
+use ./../lex/token
+
+FN startsWith(STR text, STR prefix) -> BOL = (
+    if(len(text) < len(prefix))(
+        ret false
+    )
+
+    chars = prefix.ARR()
+
+    loop([chars])(
+        if(text.i != e)(
+            ret false
+        )
+    )
+
+    ret true
+)
+
+FN hasDot(STR text) -> BOL = (
+    chars = text.ARR()
+
+    loop([chars])(
+        if(e == ".")(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN stripContainer(STR typeName) -> STR = (
+    out = ""
+    pos = 4
+
+    loop(pos < len(typeName) - 1)(
+        out += typeName.pos
+        pos += 1
+    )
+
+    ret out
+)
+
+FN isPrimitiveType(STR typeName) -> BOL = (
+    if(typeName == "INT" || typeName == "FLT" || typeName == "BOL" || typeName == "STR" || typeName == "NUL" || typeName == "DYN")(
+        ret true
+    )
+
+    ret false
+)
+
+FN isNativeType(STR typeName) -> BOL = (
+    if(typeName == "BUF.Buffer" || typeName == "FS.FileStat" || typeName == "PROC.Result" || typeName == "SQL.DB" || typeName == "SQL.Exec")(
+        ret true
+    )
+
+    if(typeName == "WEB.Req" || typeName == "WEB.Res" || typeName == "WEB.App" || typeName == "REQ.HttpRes")(
+        ret true
+    )
+
+    ret false
+)
+
+FN canonicalTypeName(STR typeName, STR module) -> STR = (
+    if(typeName == "")(
+        ret ""
+    )
+
+    if(startsWith(typeName, `REF[`))(
+        ret `REF[` + canonicalTypeName(stripContainer(typeName), module) + `]`
+    )
+
+    if(startsWith(typeName, `ARR[`))(
+        ret `ARR[` + canonicalTypeName(stripContainer(typeName), module) + `]`
+    )
+
+    if(isPrimitiveType(typeName) || hasDot(typeName) || isNativeType(typeName))(
+        ret typeName
+    )
+
+    if(module != "")(
+        ret module + "." + typeName
+    )
+
+    ret typeName
+)
+
+FN typeFullName(Ast.TypeDecl item) -> STR = (
+    if(item.module == "")(
+        ret item.name
+    )
+
+    ret item.module + "." + item.name
+)
+
+FN fnFullName(Ast.FnDecl item) -> STR = (
+    if(item.module == "")(
+        ret item.name
+    )
+
+    ret item.module + "." + item.name
+)
+
+FN typeKnown(REF[Ast.Program] program, STR typeName, STR module) -> BOL = (
+    STR canonical = canonicalTypeName(typeName, module)
+
+    if(canonical == "" || isPrimitiveType(canonical) || isNativeType(canonical))(
+        ret true
+    )
+
+    if(startsWith(canonical, `REF[`) || startsWith(canonical, `ARR[`))(
+        ret typeKnown(program, stripContainer(canonical), "")
+    )
+
+    loop([program.types])(
+        if(typeFullName(e) == canonical)(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN addDiagnostic(REF[Diagnostics.DiagnosticList] diagnostics, STR file, Token.Span span, STR message) -> NUL = (
+    *diagnostics.add(Diagnostics.diagnostic(file, span.line, span.col, span.endLine, span.endCol, "error", message))
+)
+
+FN hasName(ARR[STR] names, STR name) -> BOL = (
+    loop([names])(
+        if(e == name)(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN emptyStringList() -> ARR[STR] = (
+    ret []
+)
+
+FN emptyDiagnosticList() -> Diagnostics.DiagnosticList = (
+    ret []
+)
+
+FN typeForName(ARR[STR] names, ARR[STR] types, STR name) -> STR = (
+    found = ""
+
+    loop([names])(
+        if(e == name)(
+            found = types.i
+        )
+    )
+
+    ret found
+)
+
+FN fieldType(REF[Ast.Program] program, STR typeName, STR fieldName) -> STR = (
+    loop([program.types])(
+        if(typeFullName(e) == typeName)(
+            ownerModule = e.module
+
+            loop([e.fields])(
+                if(e.name == fieldName)(
+                    ret canonicalTypeName(e.typeName, ownerModule)
+                )
+            )
+        )
+    )
+
+    ret ""
+)
+
+FN resolveAlias(REF[Ast.Program] program, STR typeName) -> STR = (
+    loop([program.types])(
+        if(typeFullName(e) == typeName && e.kind != "MAP")(
+            ret canonicalTypeName(e.typeName, e.module)
+        )
+    )
+
+    ret typeName
+)
+
+FN arrayElementType(REF[Ast.Program] program, STR typeName) -> STR = (
+    STR concrete = resolveAlias(program, typeName)
+
+    if(startsWith(concrete, `ARR[`))(
+        ret stripContainer(concrete)
+    )
+
+    ret ""
+)
+
+FN refTargetType(STR typeName) -> STR = (
+    if(startsWith(typeName, `REF[`))(
+        ret stripContainer(typeName)
+    )
+
+    ret typeName
+)
+
+FN callName(Ast.Expr callee, STR module) -> STR = (
+    if(callee.kind == "name")(
+        if(module != "")(
+            ret module + "." + callee.text
+        )
+
+        ret callee.text
+    )
+
+    if(callee.kind == "dot" && len(callee.children) > 0 && callee.children.0.kind == "name")(
+        ret callee.children.0.text + "." + callee.text
+    )
+
+    ret ""
+)
+
+FN functionReturnType(REF[Ast.Program] program, STR name) -> STR = (
+    loop([program.functions])(
+        if(fnFullName(e) == name)(
+            ret canonicalTypeName(e.returnType, e.module)
+        )
+    )
+
+    if(name == "OS.args")(
+        ret `ARR[STR]`
+    )
+
+    if(name == "OS.cwd")(
+        ret "STR"
+    )
+
+    if(name == "OS.env")(
+        ret "STR"
+    )
+
+    if(name == "OS.platform")(
+        ret "STR"
+    )
+
+    if(name == "FS.read")(
+        ret "STR"
+    )
+
+    if(name == "FS.exists")(
+        ret "BOL"
+    )
+
+    if(name == "PATH.join")(
+        ret "STR"
+    )
+
+    if(name == "PATH.parent")(
+        ret "STR"
+    )
+
+    if(name == "PATH.name")(
+        ret "STR"
+    )
+
+    if(name == "PATH.ext")(
+        ret "STR"
+    )
+
+    if(name == "PATH.absolute")(
+        ret "STR"
+    )
+
+    if(name == "PATH.normalize")(
+        ret "STR"
+    )
+
+    if(name == "IO.print")(
+        ret "NUL"
+    )
+
+    if(name == "IO.error")(
+        ret "NUL"
+    )
+
+    if(name == "IO.readLine")(
+        ret "STR"
+    )
+
+    if(name == "BUF.new")(
+        ret "BUF.Buffer"
+    )
+
+    if(name == "BUF.toStr")(
+        ret "STR"
+    )
+
+    if(name == "BUF.len")(
+        ret "INT"
+    )
+
+    if(name == "BUF.write")(
+        ret "NUL"
+    )
+
+    if(name == "BUF.line")(
+        ret "NUL"
+    )
+
+    if(name == "BUF.clear")(
+        ret "NUL"
+    )
+
+    if(name == "BUF.free")(
+        ret "NUL"
+    )
+
+    if(name == "PROC.run")(
+        ret "PROC.Result"
+    )
+
+    if(name == "SQL.open")(
+        ret "SQL.DB"
+    )
+
+    if(name == "SQL.exec")(
+        ret "SQL.Exec"
+    )
+
+    if(name == "SQL.query")(
+        ret "DYN"
+    )
+
+    if(name == "SQL.close")(
+        ret "NUL"
+    )
+
+    ret ""
+)
+
+FN functionParamType(REF[Ast.Program] program, STR name, INT index) -> STR = (
+    loop([program.functions])(
+        if(fnFullName(e) == name && index >= 0 && index < len(e.params))(
+            ret canonicalTypeName(e.params.index.typeName, e.module)
+        )
+    )
+
+    ret ""
+)
+
+FN functionArity(REF[Ast.Program] program, STR name) -> INT = (
+    loop([program.functions])(
+        if(fnFullName(e) == name)(
+            ret len(e.params)
+        )
+    )
+
+    ret 999999
+)
+
+FN assignable(STR actual, STR wanted) -> BOL = (
+    if(wanted == "")(
+        ret true
+    )
+
+    if(actual == "")(
+        ret true
+    )
+
+    if(actual == wanted)(
+        ret true
+    )
+
+    if(actual == "NUL")(
+        ret true
+    )
+
+    if(actual == "INT")(
+        if(wanted == "FLT")(
+            ret true
+        )
+    )
+
+    if(startsWith(actual, `REF[`))(
+        if(refTargetType(actual) == wanted)(
+            ret true
+        )
+    )
+
+    if(actual == `ARR[?]`)(
+        ret true
+    )
+
+    if(actual == "OPEN")(
+        ret true
+    )
+
+    ret false
+)
+
+FN assignableKnown(REF[Ast.Program] program, STR actual, STR wanted) -> BOL = (
+    if(assignable(actual, wanted))(
+        ret true
+    )
+
+    STR resolvedActual = resolveAlias(program, actual)
+    STR resolvedWanted = resolveAlias(program, wanted)
+
+    if(assignable(resolvedActual, wanted) || assignable(actual, resolvedWanted) || assignable(resolvedActual, resolvedWanted))(
+        ret true
+    )
+
+    ret false
+)
+
+FN exprType(REF[Ast.Program] program, Ast.Expr item, STR module, ARR[STR] names, ARR[STR] types, REF[Diagnostics.DiagnosticList] diagnostics, STR file) -> STR = (
+    if(item.kind == "")(
+        ret "NUL"
+    )
+
+    if(item.kind == "int")(
+        ret "INT"
+    )
+
+    if(item.kind == "flt")(
+        ret "FLT"
+    )
+
+    if(item.kind == "bol")(
+        ret "BOL"
+    )
+
+    if(item.kind == "str")(
+        ret "STR"
+    )
+
+    if(item.kind == "nul")(
+        ret "NUL"
+    )
+
+    if(item.kind == "name")(
+        STR localType = typeForName(names, types, item.text)
+
+        if(localType != "")(
+            ret localType
+        )
+
+        if(typeKnown(program, item.text, module))(
+            ret canonicalTypeName(item.text, module)
+        )
+
+        addDiagnostic(diagnostics, file, item.span, "unknown name '" + item.text + "'")
+        ret ""
+    )
+
+    if(item.kind == "unary" && len(item.children) > 0)(
+        STR inner = exprType(program, item.children.0, module, names, types, diagnostics, file)
+
+        if(item.op == "REF")(
+            ret `REF[` + inner + `]`
+        )
+
+        if(item.op == "*")(
+            ret refTargetType(inner)
+        )
+
+        if(item.op == "!")(
+            ret "BOL"
+        )
+
+        ret inner
+    )
+
+    if(item.kind == "dot" && len(item.children) > 0)(
+        STR baseType = refTargetType(exprType(program, item.children.0, module, names, types, diagnostics, file))
+
+        if(baseType == "STR")(
+            ret "STR"
+        )
+
+        STR elementType = arrayElementType(program, baseType)
+
+        if(elementType != "")(
+            ret elementType
+        )
+
+        STR found = fieldType(program, baseType, item.text)
+
+        if(found != "")(
+            ret found
+        )
+
+        ret "DYN"
+    )
+
+    if(item.kind == "index" && len(item.children) > 0)(
+        STR baseType = refTargetType(exprType(program, item.children.0, module, names, types, diagnostics, file))
+
+        if(baseType == "STR")(
+            ret "STR"
+        )
+
+        STR elementType = arrayElementType(program, baseType)
+
+        if(elementType != "")(
+            ret elementType
+        )
+
+        ret "DYN"
+    )
+
+    if(item.kind == "array")(
+        if(len(item.children) == 0)(
+            ret `ARR[?]`
+        )
+
+        STR firstType = exprType(program, item.children.0, module, names, types, diagnostics, file)
+        ret `ARR[` + firstType + `]`
+    )
+
+    if(item.kind == "record")(
+        ret "OPEN"
+    )
+
+    if(item.kind == "binary" && len(item.children) > 1)(
+        STR leftType = exprType(program, item.children.0, module, names, types, diagnostics, file)
+        STR rightType = exprType(program, item.children.1, module, names, types, diagnostics, file)
+
+        if(item.op == "==" || item.op == "!=" || item.op == "<" || item.op == ">" || item.op == "<=" || item.op == ">=" || item.op == "&&" || item.op == "||" || item.op == "IS")(
+            ret "BOL"
+        )
+
+        if(item.op == "+" && (leftType == "STR" || rightType == "STR"))(
+            ret "STR"
+        )
+
+        if(leftType == "FLT" || rightType == "FLT")(
+            ret "FLT"
+        )
+
+        ret leftType
+    )
+
+    if(item.kind == "call" && len(item.children) > 0)(
+        callee = item.children.0
+
+        if(callee.kind == "dot" && len(callee.children) > 0 && callee.children.0.kind == "name")(
+            constructedType = callee.children.0.text + "." + callee.text
+
+            if(typeKnown(program, constructedType, ""))(
+                ret constructedType
+            )
+        )
+
+        if(callee.kind == "name" && typeKnown(program, callee.text, module))(
+            ret canonicalTypeName(callee.text, module)
+        )
+
+        if(callee.kind == "name" && callee.text == "len")(
+            ret "INT"
+        )
+
+        if(callee.kind == "name" && (callee.text == "STR" || callee.text == "upper" || callee.text == "lower" || callee.text == "trim" || callee.text == "replace"))(
+            ret "STR"
+        )
+
+        if(callee.kind == "name" && (callee.text == "BOL" || callee.text == "isDigit" || callee.text == "isAlpha" || callee.text == "isSpace" || callee.text == "starts" || callee.text == "ends"))(
+            ret "BOL"
+        )
+
+        if(callee.kind == "name" && (callee.text == "INT" || callee.text == "RAND"))(
+            ret "INT"
+        )
+
+        if(callee.kind == "name" && callee.text == "FLT")(
+            ret "FLT"
+        )
+
+        if(callee.kind == "name" && callee.text == "JSON")(
+            ret "DYN"
+        )
+
+        if(callee.kind == "dot" && callee.text == "INIT" && len(callee.children) > 0 && callee.children.0.kind == "name")(
+            ret canonicalTypeName(callee.children.0.text, module)
+        )
+
+        if(callee.kind == "dot" && len(callee.children) > 0 && callee.children.0.kind == "name")(
+            STR receiverType = typeForName(names, types, callee.children.0.text)
+
+            if(receiverType != "")(
+                if(callee.text == "len")(
+                    ret "INT"
+                )
+
+                if(callee.text == "ARR")(
+                    ret `ARR[STR]`
+                )
+
+                if(callee.text == "STR")(
+                    ret "STR"
+                )
+
+                if(callee.text == "add" || callee.text == "upd" || callee.text == "filt" || callee.text == "sort")(
+                    ret receiverType
+                )
+
+                if(callee.text == "group")(
+                    ret "DYN"
+                )
+
+                if(callee.text == "agg")(
+                    ret "INT"
+                )
+            )
+        )
+
+        if(callee.kind == "dot" && len(callee.children) > 0 && callee.children.0.kind != "name")(
+            STR receiverType = exprType(program, callee.children.0, module, names, types, diagnostics, file)
+
+            if(callee.text == "len")(
+                ret "INT"
+            )
+
+            if(callee.text == "ARR")(
+                ret `ARR[STR]`
+            )
+
+            if(callee.text == "STR")(
+                ret "STR"
+            )
+
+            if(callee.text == "add" || callee.text == "upd" || callee.text == "filt" || callee.text == "sort")(
+                ret receiverType
+            )
+
+            if(callee.text == "group")(
+                ret "DYN"
+            )
+
+            if(callee.text == "agg")(
+                ret "INT"
+            )
+        )
+
+        STR name = callName(callee, module)
+        INT expected = functionArity(program, name)
+
+        if(expected != 999999 && expected != len(item.children) - 1)(
+            addDiagnostic(diagnostics, file, item.span, "function '" + name + "' expects " + STR(expected) + " arguments, got " + STR(len(item.children) - 1))
+        )
+
+        loop([item.children])(
+            if(i > 0)(
+                STR expectedType = functionParamType(program, name, i - 1)
+
+                if(expectedType != "")(
+                    STR actualType = exprType(program, e, module, names, types, diagnostics, file)
+
+                    if(!assignableKnown(program, actualType, expectedType))(
+                        addDiagnostic(diagnostics, file, e.span, "argument " + STR(i) + " to '" + name + "' must be " + expectedType + ", got " + actualType)
+                    )
+                )
+            )
+        )
+
+        STR returnType = functionReturnType(program, name)
+
+        if(returnType != "")(
+            ret returnType
+        )
+
+        ret "NUL"
+    )
+
+    ret ""
+)
+
+FN analyzeStmtList(REF[Ast.Program] program, Ast.StmtList statements, STR module, STR returnType, ARR[STR] names, ARR[STR] types, REF[Diagnostics.DiagnosticList] diagnostics, STR file) -> NUL = (
+    loop([statements])(
+        if(e.kind == "var")(
+            STR declared = canonicalTypeName(e.typeName, module)
+
+            if(!typeKnown(program, e.typeName, module))(
+                addDiagnostic(diagnostics, file, e.span, "unknown type '" + e.typeName + "'")
+            )
+
+            if(e.value.kind != "")(
+                STR actual = exprType(program, e.value, module, names, types, diagnostics, file)
+
+                if(!assignableKnown(program, actual, declared))(
+                    addDiagnostic(diagnostics, file, e.value.span, "cannot initialize " + e.name + " as " + declared + " with " + actual)
+                )
+            )
+
+            if(hasName(names, e.name))(
+                addDiagnostic(diagnostics, file, e.span, "redeclaration of '" + e.name + "'")
+            ) else (
+                *names.add(e.name)
+                *types.add(declared)
+            )
+        ) elx(e.kind == "assign")(
+            STR actual = exprType(program, e.value, module, names, types, diagnostics, file)
+
+            if(e.target.kind == "name" && !hasName(names, e.target.text))(
+                *names.add(e.target.text)
+                *types.add(actual)
+            ) else (
+                STR target = exprType(program, e.target, module, names, types, diagnostics, file)
+
+                if(e.op == "=" && !assignableKnown(program, actual, target))(
+                    addDiagnostic(diagnostics, file, e.value.span, "cannot assign " + actual + " to " + target)
+                )
+            )
+        ) elx(e.kind == "ret")(
+            actual = "NUL"
+
+            if(e.value.kind != "")(
+                actual = exprType(program, e.value, module, names, types, diagnostics, file)
+            )
+
+            if(!assignableKnown(program, actual, returnType))(
+                addDiagnostic(diagnostics, file, e.span, "return must be " + returnType + ", got " + actual)
+            )
+        ) elx(e.kind == "expr" || e.kind == "throw" || e.kind == "free")(
+            exprType(program, e.value, module, names, types, diagnostics, file)
+        ) elx(e.kind == "if")(
+            STR condition = exprType(program, e.condition, module, names, types, diagnostics, file)
+
+            if(condition != "BOL")(
+                addDiagnostic(diagnostics, file, e.condition.span, "if condition must be BOL, got " + condition)
+            )
+
+            branchNames = names
+            branchTypes = types
+            analyzeStmtList(program, e.body, module, returnType, branchNames, branchTypes, diagnostics, file)
+
+            loop([e.elseBody])(
+                elseNames = names
+                elseTypes = types
+                analyzeStmtList(program, e.body, module, returnType, elseNames, elseTypes, diagnostics, file)
+            )
+        ) elx(e.kind == "loop")(
+            loopNames = names
+            loopTypes = types
+            STR sourceType = exprType(program, e.source, module, names, types, diagnostics, file)
+
+            *loopNames.add("i")
+            *loopTypes.add("INT")
+
+            if(e.source.kind == "array" && len(e.source.children) == 1)(
+                STR inner = exprType(program, e.source.children.0, module, names, types, diagnostics, file)
+                STR elementType = arrayElementType(program, inner)
+
+                if(elementType != "")(
+                    *loopNames.add("e")
+                    *loopTypes.add(elementType)
+                )
+            ) elx(startsWith(sourceType, `ARR[`))(
+                *loopNames.add("e")
+                *loopTypes.add(arrayElementType(program, sourceType))
+            )
+
+            analyzeStmtList(program, e.body, module, returnType, loopNames, loopTypes, diagnostics, file)
+        ) elx(e.kind == "fn")(
+            pass
+        )
+    )
+)
+
+FN analyzeFunction(REF[Ast.Program] program, Ast.FnDecl fn, REF[Diagnostics.DiagnosticList] diagnostics, STR file) -> NUL = (
+    ARR[STR] names = emptyStringList()
+    ARR[STR] types = emptyStringList()
+    STR returnType = canonicalTypeName(fn.returnType, fn.module)
+
+    if(!typeKnown(program, fn.returnType, fn.module))(
+        addDiagnostic(diagnostics, file, fn.span, "unknown return type '" + fn.returnType + "'")
+    )
+
+    loop([fn.params])(
+        STR paramType = canonicalTypeName(e.typeName, fn.module)
+
+        if(!typeKnown(program, e.typeName, fn.module))(
+            addDiagnostic(diagnostics, file, e.span, "unknown parameter type '" + e.typeName + "'")
+        )
+
+        if(hasName(names, e.name))(
+            addDiagnostic(diagnostics, file, e.span, "duplicate parameter '" + e.name + "'")
+        ) else (
+            *names.add(e.name)
+            *types.add(paramType)
+        )
+    )
+
+    analyzeStmtList(program, fn.statements, fn.module, returnType, names, types, diagnostics, file)
+)
+
+FN analyzeProgram(STR file, Ast.Program program) -> Diagnostics.DiagnosticList = (
+    Diagnostics.DiagnosticList diagnostics = emptyDiagnosticList()
+    ARR[STR] typeNames = emptyStringList()
+    ARR[STR] functionNames = emptyStringList()
+
+    loop([program.types])(
+        STR name = typeFullName(e)
+
+        if(hasName(typeNames, name))(
+            addDiagnostic(REF diagnostics, file, e.span, "duplicate type '" + name + "'")
+        ) else (
+            *typeNames.add(name)
+        )
+
+        if(e.kind == "MAP")(
+            ownerModule = e.module
+
+            loop([e.fields])(
+                if(!typeKnown(REF program, e.typeName, ownerModule))(
+                    addDiagnostic(REF diagnostics, file, e.span, "unknown field type '" + e.typeName + "'")
+                )
+            )
+        ) else (
+            if(!typeKnown(REF program, e.typeName, e.module))(
+                addDiagnostic(REF diagnostics, file, e.span, "unknown type '" + e.typeName + "'")
+            )
+        )
+    )
+
+    loop([program.functions])(
+        STR name = fnFullName(e)
+
+        if(hasName(functionNames, name))(
+            addDiagnostic(REF diagnostics, file, e.span, "duplicate function '" + name + "'")
+        ) else (
+            *functionNames.add(name)
+        )
+    )
+
+    loop([program.functions])(
+        analyzeFunction(REF program, e, REF diagnostics, file)
+    )
+
+    ret diagnostics
+)

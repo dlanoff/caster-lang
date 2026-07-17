@@ -1,0 +1,21 @@
+use ./feature
+
+FN register(Feature.FeatureSet features) -> Feature.FeatureSet = (
+    features = Feature.addRule(features, Feature.openDelimiter(
+        "ARR",
+        "open",
+        "LBRACKET",
+        "RBRACKET",
+        "array literals, ARR declarations, shape fills, and loop([array]) sources start from bracket syntax"
+    ))
+
+    features = Feature.addRule(features, Feature.closeDelimiter(
+        "ARR",
+        "close",
+        "RBRACKET",
+        "LBRACKET",
+        "array-oriented syntax needs a matching bracket boundary before later parser passes can inspect its contents"
+    ))
+
+    ret features
+)

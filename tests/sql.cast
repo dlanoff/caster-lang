@@ -1,0 +1,52 @@
+use SQL
+
+MAP User = {
+    INT id = 0,
+    STR name = "",
+    BOL active = false
+}
+
+FN decodeUsers(DYN data) -> ARR[User] = (
+    ret data
+)
+
+FN main() -> NUL = (
+    db = SQL.open(".caster/sql_test.db")
+
+    SQL.exec(REF db, "DROP TABLE IF EXISTS users", [])
+    SQL.exec(REF db, `
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL
+        )
+    `, [])
+
+    inserted = SQL.exec(REF db, `
+        INSERT INTO users (name, active)
+        VALUES (?, ?)
+    `, ["Ada", true])
+
+    SQL.exec(REF db, `
+        INSERT INTO users (name, active)
+        VALUES (?, ?)
+    `, ["Grace", false])
+
+    data = SQL.query(REF db, `
+        SELECT id, name, active
+        FROM users
+        WHERE active = ?
+        ORDER BY name
+    `, [true])
+
+    ARR[User] users = decodeUsers(data)
+
+    assert(inserted.rows == 1, "SQL.exec rows")
+    assert(inserted.lastId > 0, "SQL.exec lastId")
+    assert(users.len() == 1, "SQL.query row count")
+    assert(users.0.id == inserted.lastId, "SQL.query id")
+    assert(users.0.name == "Ada", "SQL.query text")
+    assert(users.0.active, "SQL.query bool from integer")
+
+    SQL.close(REF db)
+)

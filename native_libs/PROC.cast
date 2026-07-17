@@ -1,0 +1,4 @@
+// PROC native adapter.
+//
+// Functions are provided by src/caster/adapters/sys.c and exposed as PROC.*.
+// ProcResult is a compiler-known adapter result type.

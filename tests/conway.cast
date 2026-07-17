@@ -1,0 +1,236 @@
+// conway.cast
+//
+// Modern Caster Conway's Game of Life.
+//
+// Uses:
+// - type-first named ARR values
+// - MAP only for structural records
+// - no local type annotations
+// - no constructor-style user = User pattern
+// - len(...) helpers
+// - inferred [] locals
+// - explicit loop([arr]) wrappers with e/i for single loops
+// - nested loops name every loop context with as
+// - loop helper values are used directly instead of copied into aliases
+
+ARR[BOL] Row = []
+ARR[Row] Grid = []
+
+MAP RenderOpts = {
+    STR alive = "#",
+    STR dead = "."
+}
+
+
+
+// ========================
+// CELL LOGIC
+// ========================
+
+FN aliveAt(Grid grid, INT row, INT col) -> BOL = (
+    if(row IS < 0 || >= len(grid))(
+        ret false
+    )
+
+    if(col IS < 0 || >= len(grid.row))(
+        ret false
+    )
+
+    ret grid.row.col
+)
+
+
+FN aliveNum(Grid grid, INT row, INT col) -> INT = (
+    if(aliveAt(grid, row, col))(
+        ret 1
+    )
+
+    ret 0
+)
+
+
+FN neighborCount(Grid grid, INT row, INT col) -> INT = (
+    total = 0
+
+    total += aliveNum(grid, row - 1, col - 1)
+    total += aliveNum(grid, row - 1, col)
+    total += aliveNum(grid, row - 1, col + 1)
+    total += aliveNum(grid, row,     col - 1)
+    total += aliveNum(grid, row,     col + 1)
+    total += aliveNum(grid, row + 1, col - 1)
+    total += aliveNum(grid, row + 1, col)
+    total += aliveNum(grid, row + 1, col + 1)
+
+    ret total
+)
+
+
+FN nextCell(Grid grid, INT row, INT col) -> BOL = (
+    BOL alive = aliveAt(grid, row, col)
+    INT neighbors = neighborCount(grid, row, col)
+
+    if(alive && neighbors < 2)(
+        ret false
+    )
+
+    if(alive && neighbors > 3)(
+        ret false
+    )
+
+    if(!alive && neighbors == 3)(
+        ret true
+    )
+
+    ret alive
+)
+
+
+// ========================
+// GRID STEP
+// ========================
+
+FN step(Grid grid) -> Grid = (
+    next = []
+
+    loop([grid] as rows)(
+        row = []
+
+        loop([rows.e] as cols)(
+            *row.add(nextCell(grid, rows.i, cols.i))
+        )
+
+        *next.add(row)
+    )
+
+    ret next
+)
+
+
+// ========================
+// RENDERING
+// ========================
+
+FN renderCell(BOL alive, RenderOpts opts) -> STR = (
+    if(alive)(
+        ret opts.alive
+    )
+    ret opts.dead
+)
+
+
+FN renderRow(Grid grid, INT row, RenderOpts opts) -> STR = (
+    line = ""
+    loop([grid.row])(
+        line += renderCell(e, opts)
+    )
+    ret line
+)
+
+
+FN printGrid(Grid grid, RenderOpts opts) -> NUL = (
+    loop([grid])(
+        log(renderRow(grid, i, opts))
+    )
+)
+
+
+// ========================
+// HELPERS
+// ========================
+
+FN countAlive(Grid grid) -> INT = (
+    ret grid.agg(
+        += .agg(
+            += 1 if(e)
+        )
+    )
+)
+
+
+FN sameGrid(Grid a, Grid b) -> BOL = (
+    if(len(a) != len(b))(
+        ret false
+    )
+
+    loop([a] as rows)(
+        if(len(rows.e) != len(b.[rows.i]))(
+            ret false
+        )
+
+        loop([rows.e] as cols)(
+            if(cols.e != b.[rows.i].[cols.i])(
+                ret false
+            )
+        )
+    )
+
+    ret true
+)
+
+
+// ========================
+// TEST PATTERNS
+// ========================
+
+FN blinker() -> Grid = (
+    ret [
+        [false, false, false, false, false],
+        [false, false, true,  false, false],
+        [false, false, true,  false, false],
+        [false, false, true,  false, false],
+        [false, false, false, false, false]
+    ]
+)
+
+
+FN renderOpts() -> RenderOpts = (
+    ret {
+        alive = "#",
+        dead = "."
+    }
+)
+
+
+// ========================
+// DEMO
+// ========================
+
+FN testConwayBlinker() -> BOL = (
+    Grid grid = blinker()
+    RenderOpts opts = renderOpts()
+
+    log("generation 0")
+    printGrid(grid, opts)
+
+    grid = step(grid)
+
+    log("generation 1")
+    printGrid(grid, opts)
+
+    grid = step(grid)
+
+    log("generation 2")
+    printGrid(grid, opts)
+
+    log("alive count")
+    log(countAlive(grid))
+
+    log("returned to start")
+    BOL same = sameGrid(grid, blinker())
+    log(same)
+
+    ret countAlive(grid) == 3 && same
+)
+
+
+// ========================
+// ENTRYPOINT
+// ========================
+
+FN start() -> INT = (
+    assert(testConwayBlinker(), "conway blinker")
+
+    ret 0
+)
+
+assert(testConwayBlinker(), "conway blinker")

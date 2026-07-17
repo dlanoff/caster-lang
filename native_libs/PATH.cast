@@ -1,0 +1,3 @@
+// PATH native adapter.
+//
+// Functions are provided by src/caster/adapters/sys.c and exposed as PATH.*.

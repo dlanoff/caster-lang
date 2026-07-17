@@ -1,0 +1,318 @@
+use ./cursor
+use ./expr
+use ./types
+use ./../ast/ast
+use ./../lex/token
+
+FN isPrimitiveTypeToken(STR kind) -> BOL = (
+    ret kind == "INT_TYPE" || kind == "FLT_TYPE" || kind == "BOL_TYPE" || kind == "STR_TYPE" || kind == "NUL" || kind == "DYN_TYPE"
+)
+
+FN isTypeConstructor(STR kind) -> BOL = (
+    ret kind == "ARR" || kind == "MAP" || kind == "REF" || kind == "TSK" || kind == "FN"
+)
+
+FN startsLocalDecl(REF[Cursor.State] state) -> BOL = (
+    Token.Token first = Cursor.current(state)
+
+    if(isPrimitiveTypeToken(first.kind) || isTypeConstructor(first.kind))(
+        ret true
+    )
+
+    if(first.kind == "NAME" && Cursor.peekAt(state, 1, "NAME"))(
+        ret true
+    )
+
+    if(first.kind == "NAME" && Cursor.peekAt(state, 1, "DOT") && Cursor.peekAt(state, 2, "NAME") && Cursor.peekAt(state, 3, "NAME"))(
+        ret true
+    )
+
+    ret false
+)
+
+FN assignmentOp(STR kind) -> STR = (
+    if(kind == "EQUAL")(ret "=")
+    if(kind == "PLUSEQ")(ret "+=")
+    if(kind == "MINUSEQ")(ret "-=")
+    if(kind == "PLUSPLUS")(ret "++")
+
+    ret ""
+)
+
+FN parseParamList(REF[Cursor.State] state) -> Ast.ParamDeclList = (
+    params = []
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, "RPAREN"))(
+        Token.Token start = Cursor.current(state)
+        STR typeName = Types.parseTypeName(state)
+        Token.Token name = Cursor.expect(state, "NAME", "expected parameter name")
+        *params.add(Ast.ParamDecl({
+            name = name.lexeme,
+            typeName = typeName,
+            span = start.span
+        }))
+        Cursor.skipNewlines(state)
+
+        if(!Cursor.match(state, "COMMA"))(
+            Cursor.skipNewlines(state)
+        )
+    )
+
+    Cursor.expect(state, "RPAREN", "expected ')' after parameters")
+    ret params
+)
+
+FN parseBlock(REF[Cursor.State] state, STR closeKind) -> Ast.StmtList = (
+    statements = []
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, closeKind))(
+        Ast.Stmt item = parseStatement(state)
+        *statements.add(item)
+        Cursor.skipNewlines(state)
+
+        if(Cursor.at(state, "COMMA"))(
+            Cursor.advance(state)
+            Cursor.skipNewlines(state)
+        )
+    )
+
+    ret statements
+)
+
+FN parseReturn(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "RET", "expected ret")
+    Ast.Expr value = Ast.Expr({})
+
+    if(!Expr.isExpressionBoundary(Cursor.current(state).kind))(
+        value = Expr.parseExpression(state)
+    )
+
+    ret {
+        kind = "ret",
+        value = value,
+        span = start.span
+    }
+)
+
+FN parsePass(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "PASS", "expected pass")
+
+    ret {
+        kind = "pass",
+        span = start.span
+    }
+)
+
+FN parseThrow(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "THROW", "expected throw")
+    Cursor.expect(state, "LPAREN", "expected '(' after throw")
+    Ast.Expr value = Expr.parseExpression(state)
+    Cursor.expect(state, "RPAREN", "expected ')' after throw")
+
+    ret {
+        kind = "throw",
+        value = value,
+        span = start.span
+    }
+)
+
+FN parseFree(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "FREE", "expected FREE")
+    Ast.Expr value = Expr.parseExpression(state)
+
+    ret {
+        kind = "free",
+        value = value,
+        span = start.span
+    }
+)
+
+FN parseIf(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "IF", "expected if")
+    Cursor.expect(state, "LPAREN", "expected '(' after if")
+    Ast.Expr condition = Expr.parseExpression(state)
+    Cursor.expect(state, "RPAREN", "expected ')' after if condition")
+    Cursor.expect(state, "LPAREN", "expected '(' before if body")
+    Ast.StmtList body = parseBlock(state, "RPAREN")
+    Cursor.expect(state, "RPAREN", "expected ')' after if body")
+    elseBody = []
+    Cursor.skipNewlines(state)
+
+    loop(Cursor.at(state, "ELX"))(
+        Token.Token branchStart = Cursor.advance(state)
+        Cursor.expect(state, "LPAREN", "expected '(' after elx")
+        Ast.Expr branchCondition = Expr.parseExpression(state)
+        Cursor.expect(state, "RPAREN", "expected ')' after elx condition")
+        Cursor.expect(state, "LPAREN", "expected '(' before elx body")
+        Ast.StmtList branchBody = parseBlock(state, "RPAREN")
+        Cursor.expect(state, "RPAREN", "expected ')' after elx body")
+        *elseBody.add(Ast.Stmt({
+            kind = "elx",
+            condition = branchCondition,
+            body = branchBody,
+            span = branchStart.span
+        }))
+        Cursor.skipNewlines(state)
+    )
+
+    if(Cursor.at(state, "ELSE"))(
+        Token.Token elseStart = Cursor.advance(state)
+        Cursor.expect(state, "LPAREN", "expected '(' before else body")
+        Ast.StmtList branchBody = parseBlock(state, "RPAREN")
+        Cursor.expect(state, "RPAREN", "expected ')' after else body")
+        *elseBody.add(Ast.Stmt({
+            kind = "else",
+            body = branchBody,
+            span = elseStart.span
+        }))
+    )
+
+    ret {
+        kind = "if",
+        condition = condition,
+        body = body,
+        elseBody = elseBody,
+        span = start.span
+    }
+)
+
+FN parseLoop(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "LOOP", "expected loop")
+    Cursor.expect(state, "LPAREN", "expected '(' after loop")
+    Ast.Expr source = Expr.parseExpression(state)
+    name = ""
+
+    if(Cursor.match(state, "AS"))(
+        Token.Token alias = Cursor.expect(state, "NAME", "expected loop alias")
+        name = alias.lexeme
+    )
+
+    Cursor.expect(state, "RPAREN", "expected ')' after loop source")
+    Cursor.expect(state, "LPAREN", "expected '(' before loop body")
+    Ast.StmtList body = parseBlock(state, "RPAREN")
+    Cursor.expect(state, "RPAREN", "expected ')' after loop body")
+
+    ret {
+        kind = "loop",
+        name = name,
+        source = source,
+        body = body,
+        span = start.span
+    }
+)
+
+FN parseNestedFn(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.expect(state, "FN", "expected FN")
+    Token.Token name = Cursor.expect(state, "NAME", "expected nested function name")
+    Cursor.expect(state, "LPAREN", "expected '(' after nested function name")
+    Ast.ParamDeclList params = parseParamList(state)
+    returnType = "NUL"
+
+    if(Cursor.match(state, "ARROW"))(
+        returnType = Types.parseTypeName(state)
+    )
+
+    Cursor.expect(state, "EQUAL", "expected '=' before nested function body")
+    Cursor.expect(state, "LPAREN", "expected '(' before nested function body")
+    Ast.StmtList body = parseBlock(state, "RPAREN")
+    Cursor.expect(state, "RPAREN", "expected ')' after nested function body")
+
+    ret {
+        kind = "fn",
+        name = name.lexeme,
+        params = params,
+        returnType = returnType,
+        body = body,
+        span = start.span
+    }
+)
+
+FN parseLocalDecl(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.current(state)
+    STR typeName = Types.parseTypeName(state)
+    Token.Token name = Cursor.expect(state, "NAME", "expected local name")
+    op = ""
+    Ast.Expr value = Ast.Expr({})
+
+    if(Cursor.at(state, "EQUAL"))(
+        Token.Token assign = Cursor.advance(state)
+        op = assignmentOp(assign.kind)
+        value = Expr.parseExpression(state)
+    )
+
+    ret {
+        kind = "var",
+        name = name.lexeme,
+        typeName = typeName,
+        op = op,
+        value = value,
+        span = start.span
+    }
+)
+
+FN parseAssignmentOrExpression(REF[Cursor.State] state) -> Ast.Stmt = (
+    Token.Token start = Cursor.current(state)
+    Ast.Expr target = Expr.parseExpression(state)
+    STR op = assignmentOp(Cursor.current(state).kind)
+
+    if(op != "")(
+        Cursor.advance(state)
+        Ast.Expr value = Ast.Expr({})
+
+        if(op != "++")(
+            value = Expr.parseExpression(state)
+        )
+
+        ret {
+            kind = "assign",
+            op = op,
+            target = target,
+            value = value,
+            span = start.span
+        }
+    )
+
+    ret {
+        kind = "expr",
+        value = target,
+        span = start.span
+    }
+)
+
+FN parseStatement(REF[Cursor.State] state) -> Ast.Stmt = (
+    if(Cursor.at(state, "RET"))(
+        ret parseReturn(state)
+    )
+
+    if(Cursor.at(state, "IF"))(
+        ret parseIf(state)
+    )
+
+    if(Cursor.at(state, "LOOP"))(
+        ret parseLoop(state)
+    )
+
+    if(Cursor.at(state, "PASS"))(
+        ret parsePass(state)
+    )
+
+    if(Cursor.at(state, "THROW"))(
+        ret parseThrow(state)
+    )
+
+    if(Cursor.at(state, "FREE"))(
+        ret parseFree(state)
+    )
+
+    if(Cursor.at(state, "FN"))(
+        ret parseNestedFn(state)
+    )
+
+    if(startsLocalDecl(state))(
+        ret parseLocalDecl(state)
+    )
+
+    ret parseAssignmentOrExpression(state)
+)

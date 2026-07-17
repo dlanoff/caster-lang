@@ -1,0 +1,854 @@
+use BUF
+use ./../ast/ast
+use ./names
+use ./runtime
+
+FN isBuiltinCallName(STR name) -> BOL = (
+    ret name == "len" || name == "upper" || name == "lower" || name == "trim" || name == "replace" || name == "starts" || name == "ends" || name == "isDigit" || name == "isAlpha" || name == "isSpace" || name == "STR" || name == "INT" || name == "FLT" || name == "BOL" || name == "JSON"
+)
+
+FN isModuleLikeName(STR name) -> BOL = (
+    if(name == "OS" || name == "FS" || name == "PATH" || name == "IO" || name == "PROC" || name == "BUF" || name == "SQL" || name == "WEB" || name == "REQ")(
+        ret true
+    )
+
+    if(len(name) == 0)(
+        ret false
+    )
+
+    ret upper(name.0) == name.0 && lower(name.0) != name.0
+)
+
+FN emitExprList(REF[BUF.Buffer] buf, Ast.ExprList children, INT start, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    first = true
+
+    loop([children])(
+        if(i >= start)(
+            if(!first)(
+                BUF.write(buf, ", ")
+            )
+
+            emitExpr(buf, e, module, functions, locals, localTypes)
+            first = false
+        )
+    )
+)
+
+FN calleeName(Ast.Expr callee, STR module) -> STR = (
+    if(callee.kind == "name")(
+        if(module != "" && !isBuiltinCallName(callee.text))(
+            ret Names.moduleName(module, callee.text)
+        )
+
+        ret Names.cName(callee.text)
+    )
+
+    if(callee.kind == "dot" && len(callee.children) > 0)(
+        target = callee.children.0
+
+        if(target.kind == "name" && isModuleLikeName(target.text))(
+            ret Names.cName(target.text) + "_" + Names.cName(callee.text)
+        )
+    )
+
+    ret ""
+)
+
+FN expectedCallArgType(Names.FunctionTable functions, STR callee, INT argIndex) -> STR = (
+    STR fromProgram = Names.functionArgType(functions, callee, argIndex)
+
+    if(fromProgram != "")(
+        ret fromProgram
+    )
+
+    if(callee == "Ast_expr" && argIndex == 3)(
+        ret "Ast.ExprList"
+    )
+
+    if(callee == "Ast_typeDecl" && argIndex == 4)(
+        ret "Ast.FieldDeclList"
+    )
+
+    if(callee == "Ast_fnDecl" && argIndex == 5)(
+        ret "Ast.StmtList"
+    )
+
+    if(callee == "PATH_join" && argIndex == 0)(
+        ret "ARR[STR]"
+    )
+
+    if((callee == "BUF_line" || callee == "BUF_write") && argIndex == 1)(
+        ret "STR"
+    )
+
+    if((callee == "BUF_line" || callee == "BUF_write" || callee == "Runtime_lineC" || callee == "Runtime_writeCSource") && argIndex == 0)(
+        ret "REF[BUF.Buffer]"
+    )
+
+    if((callee == "IO_print" || callee == "IO_error") && argIndex == 0)(
+        ret "STR"
+    )
+
+    if((callee == "Names_hasString" || callee == "Names_copyStringList") && argIndex == 0)(
+        ret "Names.StringList"
+    )
+
+    if(callee == "Names_localType" && (argIndex == 0 || argIndex == 1))(
+        ret "Names.StringList"
+    )
+
+    if(callee == "Names_exprType" && (argIndex == 1 || argIndex == 2))(
+        ret "Names.StringList"
+    )
+
+    if(callee == "Loader_containsPath" && argIndex == 0)(
+        ret "StringList"
+    )
+
+    ret ""
+)
+
+FN emitCallArgs(REF[BUF.Buffer] buf, Ast.Expr item, STR module, STR callee, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    first = true
+
+    loop([item.children])(
+        if(i > 0)(
+            if(!first)(
+                BUF.write(buf, ", ")
+            )
+
+            emitExprExpected(buf, e, module, functions, expectedCallArgType(functions, callee, i - 1), locals, localTypes)
+            first = false
+        )
+    )
+)
+
+FN isInitCall(Ast.Expr item) -> BOL = (
+    if(item.kind != "call" || len(item.children) == 0)(
+        ret false
+    )
+
+    callee = item.children.0
+
+    if(callee.kind != "dot" || callee.text != "INIT" || len(callee.children) == 0)(
+        ret false
+    )
+
+    ret callee.children.0.kind == "name"
+)
+
+FN emitInitCall(REF[BUF.Buffer] buf, Ast.Expr item, STR module) -> NUL = (
+    callee = item.children.0
+    target = callee.children.0
+    BUF.write(buf, "(")
+    BUF.write(buf, Names.cTypeFor(target.text, module))
+    BUF.write(buf, "){0}")
+)
+
+FN initCallType(Ast.Expr item) -> STR = (
+    if(!isInitCall(item))(
+        ret ""
+    )
+
+    callee = item.children.0
+    target = callee.children.0
+    ret target.text
+)
+
+FN constructorCallType(Ast.Expr item) -> STR = (
+    if(item.kind != "call" || len(item.children) < 2)(
+        ret ""
+    )
+
+    callee = item.children.0
+
+    if(callee.kind == "dot" && len(callee.children) > 0)(
+        target = callee.children.0
+
+        if(target.kind == "name" && isModuleLikeName(target.text))(
+            ret target.text + "." + callee.text
+        )
+    )
+
+    if(callee.kind == "name" && isModuleLikeName(callee.text))(
+        ret callee.text
+    )
+
+    ret ""
+)
+
+FN emitConstructorCall(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> BOL = (
+    STR typeName = constructorCallType(item)
+
+    if(typeName == "" || len(item.children) < 2 || item.children.1.kind != "record")(
+        ret false
+    )
+
+    emitRecordLiteral(buf, item.children.1, module, functions, typeName, locals, localTypes)
+    ret true
+)
+
+FN isPrintCall(Ast.Expr item) -> BOL = (
+    if(item.kind != "call" || len(item.children) < 2)(
+        ret false
+    )
+
+    callee = item.children.0
+
+    if(callee.kind != "dot" || callee.text != "print" || len(callee.children) == 0)(
+        ret false
+    )
+
+    target = callee.children.0
+    ret target.kind == "name" && target.text == "IO"
+)
+
+FN emitPrintCall(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    STR argType = Names.exprType(item.children.1, locals, localTypes, module)
+
+    if(argType == "STR")(
+        BUF.write(buf, "IO_print(")
+        emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    Runtime.writeCSource(buf, `printf("%lld\\n", (long long)(`)
+    emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+    BUF.write(buf, "))")
+)
+
+FN decodedStringLength(STR text) -> INT = (
+    count = 0
+    pos = 0
+
+    loop(pos < len(text))(
+        ch = text.pos
+
+        if(ch == `\` && pos + 1 < len(text))(
+            next = text.[pos + 1]
+
+            if(next == "n" || next == "t" || next == "r" || next == `"` || next == `\`)(
+                count += 1
+                pos += 2
+            ) else (
+                count += 1
+                pos += 1
+            )
+        ) else (
+            count += 1
+            pos += 1
+        )
+    )
+
+    ret count
+)
+
+FN emitCStringLiteral(REF[BUF.Buffer] buf, STR text) -> NUL = (
+    BUF.write(buf, `flx_str_lit("`)
+    pos = 0
+
+    loop(pos < len(text))(
+        ch = text.pos
+
+        if(ch == `\` && pos + 1 < len(text))(
+            next = text.[pos + 1]
+
+            if(next == "n")(
+                BUF.write(buf, `\`)
+                BUF.write(buf, "n")
+                pos += 2
+            ) elx(next == "t")(
+                BUF.write(buf, `\`)
+                BUF.write(buf, "t")
+                pos += 2
+            ) elx(next == "r")(
+                BUF.write(buf, `\`)
+                BUF.write(buf, "r")
+                pos += 2
+            ) elx(next == `"`)(
+                BUF.write(buf, `\`)
+                BUF.write(buf, `"`)
+                pos += 2
+            ) elx(next == `\`)(
+                BUF.write(buf, `\`)
+                BUF.write(buf, `\`)
+                pos += 2
+            ) else (
+                BUF.write(buf, `\`)
+                pos += 1
+            )
+        ) elx(ch == `"`)(
+            BUF.write(buf, `\`)
+            BUF.write(buf, `"`)
+            pos += 1
+        ) elx(ch == `\`)(
+            BUF.write(buf, `\`)
+            BUF.write(buf, `\`)
+            pos += 1
+        ) elx(ch == "\n")(
+            BUF.write(buf, `\`)
+            BUF.write(buf, "n")
+            pos += 1
+        ) elx(ch == "\t")(
+            BUF.write(buf, `\`)
+            BUF.write(buf, "t")
+            pos += 1
+        ) else (
+            BUF.write(buf, ch)
+            pos += 1
+        )
+    )
+
+    BUF.write(buf, `", `)
+    BUF.write(buf, STR(decodedStringLength(text)))
+    BUF.write(buf, ")")
+)
+
+FN emitDot(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(len(item.children) == 0)(
+        BUF.write(buf, item.text)
+        ret
+    )
+
+    child = item.children.0
+
+    if(child.kind == "name" && isModuleLikeName(child.text))(
+        BUF.write(buf, Names.cName(child.text))
+        BUF.write(buf, "_")
+        BUF.write(buf, Names.cName(item.text))
+        ret
+    )
+
+    STR childType = Names.refTargetType(Names.exprType(child, locals, localTypes, module))
+
+    if(childType == "STR")(
+        BUF.write(buf, "flx_str_at(")
+        emitExpr(buf, child, module, functions, locals, localTypes)
+        BUF.write(buf, ", ")
+        BUF.write(buf, Names.cName(item.text))
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(Names.arrayElementForAlias(childType, module) != "")(
+        emitReadExpr(buf, child, module, functions, locals, localTypes)
+        BUF.write(buf, ".data[")
+        BUF.write(buf, Names.cName(item.text))
+        BUF.write(buf, "]")
+        ret
+    )
+
+    STR rawChildType = Names.exprType(child, locals, localTypes, module)
+
+    if(Names.startsWith(rawChildType, "REF["))(
+        if(child.kind == "name")(
+            BUF.write(buf, Names.cName(child.text))
+        ) else (
+            emitExpr(buf, child, module, functions, locals, localTypes)
+        )
+        BUF.write(buf, "->")
+    ) else (
+        emitExpr(buf, child, module, functions, locals, localTypes)
+        BUF.write(buf, ".")
+    )
+
+    BUF.write(buf, Names.cName(item.text))
+)
+
+FN emitRefDotTarget(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> BOL = (
+    if(item.kind != "unary" || item.op != "*" || len(item.children) == 0)(
+        ret false
+    )
+
+    child = item.children.0
+
+    if(child.kind != "dot" || len(child.children) == 0)(
+        ret false
+    )
+
+    if(child.children.0.kind == "name")(
+        BUF.write(buf, Names.cName(child.children.0.text))
+    ) else (
+        emitExpr(buf, child.children.0, module, functions, locals, localTypes)
+    )
+
+    BUF.write(buf, "->")
+    BUF.write(buf, Names.cName(child.text))
+    ret true
+)
+
+FN emitTarget(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(emitRefDotTarget(buf, item, module, functions, locals, localTypes))(
+        ret
+    )
+
+    if(item.kind == "unary" && item.op == "*" && len(item.children) > 0)(
+        BUF.write(buf, "*")
+        emitPointerExpr(buf, item.children.0, module, functions, locals, localTypes)
+        ret
+    )
+
+    emitExpr(buf, item, module, functions, locals, localTypes)
+)
+
+FN emitReadExpr(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    STR actualType = Names.exprType(item, locals, localTypes, module)
+
+    if(Names.startsWith(actualType, "REF["))(
+        if(item.kind == "name")(
+            emitExpr(buf, item, module, functions, locals, localTypes)
+            ret
+        )
+
+        BUF.write(buf, "(*")
+        emitExpr(buf, item, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    emitExpr(buf, item, module, functions, locals, localTypes)
+)
+
+FN emitPointerExpr(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(item.kind == "name")(
+        BUF.write(buf, Names.cName(item.text))
+        ret
+    )
+
+    emitExpr(buf, item, module, functions, locals, localTypes)
+)
+
+FN emitRecordLiteral(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, STR expectedType, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    BUF.write(buf, "(")
+    BUF.write(buf, Names.cTypeFor(expectedType, module))
+    BUF.write(buf, "){")
+    first = true
+
+    loop([item.children])(
+        if(!first)(
+            BUF.write(buf, ", ")
+        )
+
+        BUF.write(buf, ".")
+        BUF.write(buf, Names.cName(e.text))
+        BUF.write(buf, " = ")
+
+        if(len(e.children) > 0)(
+            emitExprExpected(buf, e.children.0, module, functions, Names.recordFieldExpectedType(expectedType, e.text, module), locals, localTypes)
+        ) else (
+            BUF.write(buf, Names.cName(e.text))
+        )
+
+        first = false
+    )
+
+    BUF.write(buf, "}")
+)
+
+FN emitArrayLiteral(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, STR expectedType, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(expectedType != "")(
+        BUF.write(buf, "(")
+        BUF.write(buf, Names.cTypeFor(expectedType, module))
+        BUF.write(buf, "){")
+
+        if(len(item.children) > 0)(
+            STR elementType = Names.arrayElementForAlias(expectedType, module)
+            BUF.write(buf, ".data = (")
+            BUF.write(buf, Names.cTypeFor(elementType, module))
+            BUF.write(buf, "[]){")
+            first = true
+
+            loop([item.children])(
+                if(!first)(
+                    BUF.write(buf, ", ")
+                )
+
+                emitExprExpected(buf, e, module, functions, elementType, locals, localTypes)
+                first = false
+            )
+
+            BUF.write(buf, "}, .len = ")
+            BUF.write(buf, STR(len(item.children)))
+            BUF.write(buf, ", .cap = ")
+            BUF.write(buf, STR(len(item.children)))
+        ) else (
+            BUF.write(buf, "0")
+        )
+
+        BUF.write(buf, "}")
+        ret
+    )
+
+    BUF.write(buf, "/* unsupported_expr:array */ 0")
+)
+
+FN emitArrayAddCall(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes, BOL mutate) -> BOL = (
+    if(!Names.isMethodCall(item, "add") || len(item.children) < 2)(
+        ret false
+    )
+
+    callee = item.children.0
+    target = callee.children.0
+    STR rawArrayType = Names.exprType(target, locals, localTypes, module)
+    STR arrayType = Names.refTargetType(rawArrayType)
+
+    if(arrayType == "" && target.kind == "name")(
+        arrayType = Names.localArrayExpectedType(target.text, module)
+    )
+
+    if(arrayType == "")(
+        ret false
+    )
+
+    STR elementType = Names.arrayElementForAlias(arrayType, module)
+
+    if(mutate)(
+        if(Names.startsWith(rawArrayType, "REF["))(
+            BUF.write(buf, "(*")
+            emitPointerExpr(buf, target, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+        ) else (
+            emitExpr(buf, target, module, functions, locals, localTypes)
+        )
+
+        BUF.write(buf, " = ")
+    )
+
+    BUF.write(buf, Names.arrayAddFnName(arrayType, module))
+    BUF.write(buf, "(")
+
+    if(Names.startsWith(rawArrayType, "REF["))(
+        BUF.write(buf, "(*")
+        emitPointerExpr(buf, target, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+    ) else (
+        emitExpr(buf, target, module, functions, locals, localTypes)
+    )
+
+    BUF.write(buf, ", ")
+    emitExprExpected(buf, item.children.1, module, functions, elementType, locals, localTypes)
+    BUF.write(buf, ")")
+    ret true
+)
+
+FN emitRecordUpdateCall(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> BOL = (
+    if(!Names.isMethodCall(item, "upd") || len(item.children) < 2)(
+        ret false
+    )
+
+    update = item.children.1
+
+    if(update.kind != "record")(
+        ret false
+    )
+
+    callee = item.children.0
+    target = callee.children.0
+    BUF.write(buf, "({ __auto_type __caster_updated = ")
+    emitExpr(buf, target, module, functions, locals, localTypes)
+    BUF.write(buf, "; ")
+
+    loop([update.children])(
+        BUF.write(buf, "__caster_updated.")
+        BUF.write(buf, Names.cName(e.text))
+        BUF.write(buf, " = ")
+
+        if(len(e.children) > 0)(
+            emitExpr(buf, e.children.0, module, functions, locals, localTypes)
+        ) else (
+            BUF.write(buf, Names.cName(e.text))
+        )
+
+        BUF.write(buf, "; ")
+    )
+
+    BUF.write(buf, "__caster_updated; })")
+    ret true
+)
+
+FN emitSubjectCompare(REF[BUF.Buffer] buf, Ast.Expr subject, Ast.Expr clause, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    STR subjectType = Names.exprType(subject, locals, localTypes, module)
+    STR clauseType = Names.exprType(clause, locals, localTypes, module)
+
+    if(subjectType == "STR" || clauseType == "STR")(
+        BUF.write(buf, "flx_str_eq(")
+        emitExpr(buf, subject, module, functions, locals, localTypes)
+        BUF.write(buf, ", ")
+        emitExpr(buf, clause, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    BUF.write(buf, "(")
+    emitExpr(buf, subject, module, functions, locals, localTypes)
+    BUF.write(buf, " == ")
+    emitExpr(buf, clause, module, functions, locals, localTypes)
+    BUF.write(buf, ")")
+)
+
+FN emitIsExpr(REF[BUF.Buffer] buf, Ast.Expr subject, Ast.Expr clause, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(clause.kind == "binary" && (clause.op == "||" || clause.op == "&&"))(
+        BUF.write(buf, "(")
+        emitIsExpr(buf, subject, clause.children.0, module, functions, locals, localTypes)
+        BUF.write(buf, " ")
+        BUF.write(buf, clause.op)
+        BUF.write(buf, " ")
+        emitIsExpr(buf, subject, clause.children.1, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(clause.kind == "binary" && (clause.op == "==" || clause.op == "!=" || clause.op == "<" || clause.op == ">" || clause.op == "<=" || clause.op == ">="))(
+        BUF.write(buf, "(")
+        emitExpr(buf, subject, module, functions, locals, localTypes)
+        BUF.write(buf, " ")
+        BUF.write(buf, clause.op)
+        BUF.write(buf, " ")
+        emitExpr(buf, clause.children.1, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    emitSubjectCompare(buf, subject, clause, module, functions, locals, localTypes)
+)
+
+FN emitExprExpected(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, STR expectedType, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    STR actualType = Names.exprType(item, locals, localTypes, module)
+
+    if(expectedType != "" && Names.startsWith(expectedType, "REF[") && Names.sameType(actualType, expectedType, module))(
+        emitPointerExpr(buf, item, module, functions, locals, localTypes)
+        ret
+    )
+
+    if(expectedType != "" && Names.startsWith(actualType, "REF[") && Names.sameType(Names.refTargetType(actualType), expectedType, module))(
+        if(item.kind == "name")(
+            emitExpr(buf, item, module, functions, locals, localTypes)
+            ret
+        )
+
+        BUF.write(buf, "(*")
+        emitExpr(buf, item, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(expectedType == "STR" && actualType == "INT")(
+        BUF.write(buf, "flx_str_from_int(")
+        emitExpr(buf, item, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(item.kind == "record" && expectedType != "")(
+        emitRecordLiteral(buf, item, module, functions, expectedType, locals, localTypes)
+        ret
+    )
+
+    if(item.kind == "array")(
+        emitArrayLiteral(buf, item, module, functions, expectedType, locals, localTypes)
+        ret
+    )
+
+    if(item.kind == "call" && emitArrayAddCall(buf, item, module, functions, locals, localTypes, false))(
+        ret
+    )
+
+    if(item.kind == "call" && emitConstructorCall(buf, item, module, functions, locals, localTypes))(
+        ret
+    )
+
+    if(item.kind == "call" && emitRecordUpdateCall(buf, item, module, functions, locals, localTypes))(
+        ret
+    )
+
+    emitExpr(buf, item, module, functions, locals, localTypes)
+)
+
+FN emitExpr(REF[BUF.Buffer] buf, Ast.Expr item, STR module, Names.FunctionTable functions, Names.StringList locals, Names.StringList localTypes) -> NUL = (
+    if(item.kind == "int" || item.kind == "flt" || item.kind == "bol")(
+        BUF.write(buf, item.text)
+        ret
+    )
+
+    if(item.kind == "str")(
+        emitCStringLiteral(buf, item.text)
+        ret
+    )
+
+    if(item.kind == "nul")(
+        BUF.write(buf, "0")
+        ret
+    )
+
+    if(item.kind == "name")(
+        if(Names.startsWith(Names.exprType(item, locals, localTypes, module), "REF["))(
+            BUF.write(buf, "(*")
+            BUF.write(buf, Names.cName(item.text))
+            BUF.write(buf, ")")
+            ret
+        )
+
+        BUF.write(buf, Names.cName(item.text))
+        ret
+    )
+
+    if(item.kind == "dot")(
+        emitDot(buf, item, module, functions, locals, localTypes)
+        ret
+    )
+
+    if(item.kind == "index")(
+        STR baseType = Names.refTargetType(Names.exprType(item.children.0, locals, localTypes, module))
+
+        if(baseType == "STR")(
+            BUF.write(buf, "flx_str_at(")
+            emitReadExpr(buf, item.children.0, module, functions, locals, localTypes)
+            BUF.write(buf, ", ")
+            emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        emitReadExpr(buf, item.children.0, module, functions, locals, localTypes)
+        BUF.write(buf, ".data[")
+        emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+        BUF.write(buf, "]")
+        ret
+    )
+
+    if(item.kind == "group")(
+        BUF.write(buf, "(")
+        emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(item.kind == "unary")(
+        if(item.op == "REF")(
+            BUF.write(buf, "&")
+            emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+            ret
+        )
+
+        if(item.op == "*")(
+            if(emitRefDotTarget(buf, item, module, functions, locals, localTypes))(
+                ret
+            )
+        )
+
+        BUF.write(buf, item.op)
+        emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+        ret
+    )
+
+    if(item.kind == "binary")(
+        STR leftType = Names.exprType(item.children.0, locals, localTypes, module)
+        STR rightType = Names.exprType(item.children.1, locals, localTypes, module)
+
+        if(item.op == "IS")(
+            emitIsExpr(buf, item.children.0, item.children.1, module, functions, locals, localTypes)
+            ret
+        )
+
+        if(item.op == "+" && (leftType == "STR" || rightType == "STR"))(
+            BUF.write(buf, "flx_str_concat(")
+            emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+            BUF.write(buf, ", ")
+            emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        if(item.op == "==" && (leftType == "STR" || rightType == "STR"))(
+            BUF.write(buf, "flx_str_eq(")
+            emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+            BUF.write(buf, ", ")
+            emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        if(item.op == "!=" && (leftType == "STR" || rightType == "STR"))(
+            BUF.write(buf, "!flx_str_eq(")
+            emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+            BUF.write(buf, ", ")
+            emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        BUF.write(buf, "(")
+        emitExpr(buf, item.children.0, module, functions, locals, localTypes)
+        BUF.write(buf, " ")
+        BUF.write(buf, item.op)
+        BUF.write(buf, " ")
+        emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    if(item.kind == "call")(
+        if(emitConstructorCall(buf, item, module, functions, locals, localTypes))(
+            ret
+        )
+
+        if(isInitCall(item))(
+            emitInitCall(buf, item, module)
+            ret
+        )
+
+        if(emitArrayAddCall(buf, item, module, functions, locals, localTypes, false))(
+            ret
+        )
+
+        if(emitRecordUpdateCall(buf, item, module, functions, locals, localTypes))(
+            ret
+        )
+
+        callee = item.children.0
+
+        if(callee.kind == "name" && callee.text == "len" && len(item.children) > 1)(
+            BUF.write(buf, "(")
+            emitReadExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ").len")
+            ret
+        )
+
+        if(callee.kind == "dot" && callee.text == "ARR" && len(callee.children) > 0 && Names.exprType(callee.children.0, locals, localTypes, module) == "STR")(
+            BUF.write(buf, "flx_str_chars(")
+            emitExpr(buf, callee.children.0, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        if(callee.kind == "name" && callee.text == "STR" && len(item.children) > 1)(
+            BUF.write(buf, "flx_str_from_int(")
+            emitExpr(buf, item.children.1, module, functions, locals, localTypes)
+            BUF.write(buf, ")")
+            ret
+        )
+
+        if(isPrintCall(item))(
+            emitPrintCall(buf, item, module, functions, locals, localTypes)
+            ret
+        )
+
+        STR callName = calleeName(callee, module)
+
+        if(callee.kind == "name" && module != "" && !isBuiltinCallName(callee.text))(
+            BUF.write(buf, callName)
+        ) else (
+            emitExpr(buf, callee, module, functions, locals, localTypes)
+        )
+
+        BUF.write(buf, "(")
+        emitCallArgs(buf, item, module, callName, functions, locals, localTypes)
+        BUF.write(buf, ")")
+        ret
+    )
+
+    BUF.write(buf, "/* unsupported_expr:")
+    BUF.write(buf, item.kind)
+    BUF.write(buf, " */ 0")
+)

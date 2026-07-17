@@ -1,0 +1,45 @@
+use REQ
+
+FN handle(Req req) -> Res = (
+    if(req.path == "/health")(
+        ret {
+            status = 200,
+            body = "ok"
+        }
+    )
+
+    if(req.path == "/echo-content-type")(
+        key = "content-type"
+        if(req.headers.has(key))(
+            ret {
+                status = 200,
+                body = req.headers.key
+            }
+        )
+
+        ret {
+            status = 400,
+            body = "missing content-type"
+        }
+    )
+
+    if(req.path == "/json")(
+        ret {
+            status = 200,
+            body = `{"ok":true}`,
+            headers = {
+                "content-type" = "application/json",
+                "x-caster" = "host"
+            }
+        }
+    )
+
+    ret {
+        status = 404,
+        body = req.method + " " + req.path
+    }
+)
+
+FN main() -> NUL = (
+    REQ.host(8080, handle)
+)

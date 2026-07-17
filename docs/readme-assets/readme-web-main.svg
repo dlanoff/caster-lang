@@ -1,0 +1,89 @@
+<svg width="860" height="1374" viewBox="0 0 860 1374" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Route-first WEB app</title>
+  <desc id="desc">Syntax highlighted code block: Route-first WEB app.</desc>
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7457d9"/>
+      <stop offset="0.55" stop-color="#1f7bd6"/>
+      <stop offset="1" stop-color="#a87924"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .base { font: 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #e8eef7; }
+      .title { font: 700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #8ca3b8; letter-spacing: .04em; }
+      .kw { fill: #ff5f6d; font-weight: 700; }
+      .fn { fill: #c792ea; }
+      .blue { fill: #4da3ff; }
+      .type { fill: #9dd6ff; }
+      .num { fill: #9dd6ff; }
+      .loop { fill: #ffe49c; }
+      .str { fill: #f6c177; }
+      .op { fill: #95a7bd; }
+      .comment { fill: #8ca3b8; font-style: italic; }
+      .base-fill { fill: #e8eef7; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="858" height="1372" rx="14" fill="url(#rim)" opacity="0.86"/>
+  <rect x="3" y="3" width="854" height="1368" rx="13" fill="#0f1420"/>
+  <path d="M18 61 C155 25 258 82 378 58 C516 25 619 92 722 58 C783 40 826 46 842 64" fill="none" stroke="#7457d9" stroke-width="1.25" opacity="0.38" filter="url(#glow)"/>
+  <circle cx="29" cy="29" r="5.5" fill="#ff5f6d"/>
+  <circle cx="50" cy="29" r="5.5" fill="#f6c177"/>
+  <circle cx="71" cy="29" r="5.5" fill="#4da3ff"/>
+  <text class="title" x="776" y="34">CASTER</text>
+  <text class="title" x="804" y="60" fill="#f6c177">*</text>
+  <text class="base" xml:space="preserve" x="36" y="78"><tspan class="kw">use</tspan> <tspan class="blue">WEB</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="104"></text>
+  <text class="base" xml:space="preserve" x="36" y="130"><tspan class="kw">FN</tspan> <tspan class="fn">main</tspan>() <tspan class="op">-&gt;</tspan> <tspan class="blue">NUL</tspan> <tspan class="op">=</tspan> (</text>
+  <text class="base" xml:space="preserve" x="36" y="156">    <tspan class="base-fill">app</tspan> <tspan class="op">=</tspan> <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="fn">app</tspan>({</text>
+  <text class="base" xml:space="preserve" x="36" y="182">        <tspan class="base-fill">port</tspan> <tspan class="op">=</tspan> <tspan class="num">8080</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="208">    })</text>
+  <text class="base" xml:space="preserve" x="36" y="234"></text>
+  <text class="base" xml:space="preserve" x="36" y="260">    <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="fn">get</tspan>(<tspan class="kw">REF</tspan> <tspan class="base-fill">app</tspan>, <tspan class="str">"/accounts/:id"</tspan>, [<tspan class="base-fill">auth</tspan>], <tspan class="base-fill">getAccount</tspan>)</text>
+  <text class="base" xml:space="preserve" x="36" y="286"></text>
+  <text class="base" xml:space="preserve" x="36" y="312">    <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="fn">listen</tspan>(<tspan class="kw">REF</tspan> <tspan class="base-fill">app</tspan>)</text>
+  <text class="base" xml:space="preserve" x="36" y="338">)</text>
+  <text class="base" xml:space="preserve" x="36" y="364"></text>
+  <text class="base" xml:space="preserve" x="36" y="390"><tspan class="kw">FN</tspan> <tspan class="fn">auth</tspan>(<tspan class="kw">REF</tspan>[<tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="type">Req</tspan>] <tspan class="base-fill">req</tspan>) <tspan class="op">-&gt;</tspan> <tspan class="type">BOL</tspan> <tspan class="op">=</tspan> (</text>
+  <text class="base" xml:space="preserve" x="36" y="416">    <tspan class="base-fill">key</tspan> <tspan class="op">=</tspan> <tspan class="str">"authorization"</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="442"></text>
+  <text class="base" xml:space="preserve" x="36" y="468">    <tspan class="kw">if</tspan>(<tspan class="op">!</tspan><tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">headers</tspan><tspan class="op">.</tspan><tspan class="fn">has</tspan>(<tspan class="base-fill">key</tspan>))(</text>
+  <text class="base" xml:space="preserve" x="36" y="494">        <tspan class="op">*</tspan><tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">res</tspan> <tspan class="op">=</tspan> <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="fn">json</tspan>({</text>
+  <text class="base" xml:space="preserve" x="36" y="520">            <tspan class="base-fill">error</tspan> <tspan class="op">=</tspan> <tspan class="str">"missing authorization"</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="546">        }, <tspan class="num">401</tspan>)</text>
+  <text class="base" xml:space="preserve" x="36" y="572"></text>
+  <text class="base" xml:space="preserve" x="36" y="598">        <tspan class="kw">ret</tspan> <tspan class="num">false</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="624">    )</text>
+  <text class="base" xml:space="preserve" x="36" y="650"></text>
+  <text class="base" xml:space="preserve" x="36" y="676">    <tspan class="op">*</tspan><tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">ctx</tspan> <tspan class="op">=</tspan> <tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">ctx</tspan> <tspan class="op">+</tspan> {</text>
+  <text class="base" xml:space="preserve" x="36" y="702">        <tspan class="str">"userId"</tspan> <tspan class="op">=</tspan> <tspan class="str">"user_123"</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="728">    }</text>
+  <text class="base" xml:space="preserve" x="36" y="754"></text>
+  <text class="base" xml:space="preserve" x="36" y="780">    <tspan class="kw">ret</tspan> <tspan class="num">true</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="806">)</text>
+  <text class="base" xml:space="preserve" x="36" y="832"></text>
+  <text class="base" xml:space="preserve" x="36" y="858"><tspan class="kw">FN</tspan> <tspan class="fn">getAccount</tspan>(<tspan class="kw">REF</tspan>[<tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="type">Req</tspan>] <tspan class="base-fill">req</tspan>) <tspan class="op">-&gt;</tspan> <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="type">Res</tspan> <tspan class="op">=</tspan> (</text>
+  <text class="base" xml:space="preserve" x="36" y="884">    <tspan class="base-fill">payments</tspan> <tspan class="op">=</tspan> [</text>
+  <text class="base" xml:space="preserve" x="36" y="910">        { <tspan class="base-fill">amount</tspan> <tspan class="op">=</tspan> <tspan class="num">120</tspan>, <tspan class="base-fill">settled</tspan> <tspan class="op">=</tspan> <tspan class="num">true</tspan>, <tspan class="base-fill">kind</tspan> <tspan class="op">=</tspan> <tspan class="str">"sale"</tspan> },</text>
+  <text class="base" xml:space="preserve" x="36" y="936">        { <tspan class="base-fill">amount</tspan> <tspan class="op">=</tspan> <tspan class="num">35</tspan>, <tspan class="base-fill">settled</tspan> <tspan class="op">=</tspan> <tspan class="num">false</tspan>, <tspan class="base-fill">kind</tspan> <tspan class="op">=</tspan> <tspan class="str">"sale"</tspan> },</text>
+  <text class="base" xml:space="preserve" x="36" y="962">        { <tspan class="base-fill">amount</tspan> <tspan class="op">=</tspan> <tspan class="num">10</tspan>, <tspan class="base-fill">settled</tspan> <tspan class="op">=</tspan> <tspan class="num">true</tspan>, <tspan class="base-fill">kind</tspan> <tspan class="op">=</tspan> <tspan class="str">"refund"</tspan> }</text>
+  <text class="base" xml:space="preserve" x="36" y="988">    ]</text>
+  <text class="base" xml:space="preserve" x="36" y="1014"></text>
+  <text class="base" xml:space="preserve" x="36" y="1040">    <tspan class="base-fill">revenue</tspan> <tspan class="op">=</tspan> <tspan class="base-fill">payments</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="1066">        <tspan class="op">.</tspan><tspan class="fn">filt</tspan>(<tspan class="loop">e</tspan><tspan class="op">.</tspan><tspan class="base-fill">settled</tspan> <tspan class="op">&amp;&amp;</tspan> <tspan class="loop">e</tspan><tspan class="op">.</tspan><tspan class="base-fill">kind</tspan> <tspan class="op">==</tspan> <tspan class="str">"sale"</tspan>)</text>
+  <text class="base" xml:space="preserve" x="36" y="1092">        <tspan class="op">.</tspan><tspan class="fn">agg</tspan>(</text>
+  <text class="base" xml:space="preserve" x="36" y="1118">            <tspan class="op">+=</tspan> <tspan class="loop">e</tspan><tspan class="op">.</tspan><tspan class="base-fill">amount</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="1144">        )</text>
+  <text class="base" xml:space="preserve" x="36" y="1170"></text>
+  <text class="base" xml:space="preserve" x="36" y="1196">    <tspan class="kw">ret</tspan> <tspan class="blue">WEB</tspan><tspan class="op">.</tspan><tspan class="fn">json</tspan>({</text>
+  <text class="base" xml:space="preserve" x="36" y="1222">        <tspan class="base-fill">user</tspan> <tspan class="op">=</tspan> <tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">ctx</tspan><tspan class="op">.</tspan><tspan class="base-fill">userId</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="1248">        <tspan class="base-fill">account</tspan> <tspan class="op">=</tspan> <tspan class="base-fill">req</tspan><tspan class="op">.</tspan><tspan class="base-fill">params</tspan><tspan class="op">.</tspan><tspan class="base-fill">id</tspan>,</text>
+  <text class="base" xml:space="preserve" x="36" y="1274">        <tspan class="base-fill">revenue</tspan> <tspan class="op">=</tspan> <tspan class="base-fill">revenue</tspan></text>
+  <text class="base" xml:space="preserve" x="36" y="1300">    })</text>
+  <text class="base" xml:space="preserve" x="36" y="1326">)</text>
+</svg>

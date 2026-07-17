@@ -1,0 +1,285 @@
+use ./cursor
+use ./stmt
+use ./types
+use ./../ast/ast
+use ./../lex/token
+
+FN tokenText(Token.Token tok) -> STR = (
+    if(tok.kind == "STRING_LITERAL")(
+        ret `"` + tok.lexeme + `"`
+    )
+
+    if(tok.kind == "NEWLINE" || tok.kind == "EOF")(
+        ret ""
+    )
+
+    ret tok.lexeme
+)
+
+FN appendTokenText(STR current, Token.Token tok) -> STR = (
+    STR piece = tokenText(tok)
+
+    if(piece == "")(
+        ret current
+    )
+
+    if(current == "")(
+        ret piece
+    )
+
+    ret current + " " + piece
+)
+
+FN delimiterDelta(Token.Token tok) -> INT = (
+    if(tok.kind == "LPAREN" || tok.kind == "LBRACE" || tok.kind == "LBRACKET")(
+        ret 1
+    )
+
+    if(tok.kind == "RPAREN" || tok.kind == "RBRACE" || tok.kind == "RBRACKET")(
+        ret -1
+    )
+
+    ret 0
+)
+
+FN captureUntilBoundary(REF[Cursor.State] state, STR closeKind) -> STR = (
+    out = ""
+    depth = 0
+
+    loop(!Cursor.atEnd(state))(
+        Token.Token tok = Cursor.current(state)
+
+        if(depth == 0 && (tok.kind == closeKind || tok.kind == "COMMA" || tok.kind == "NEWLINE"))(
+            ret out
+        )
+
+        out = appendTokenText(out, tok)
+        depth += delimiterDelta(tok)
+        Cursor.advance(state)
+    )
+
+    ret out
+)
+
+FN captureBalanced(REF[Cursor.State] state, STR openKind, STR closeKind) -> STR = (
+    out = ""
+    depth = 0
+
+    if(!Cursor.at(state, openKind))(
+        Token.Token tok = Cursor.current(state)
+        Cursor.addError(state, tok, "expected balanced region")
+        ret out
+    )
+
+    loop(!Cursor.atEnd(state))(
+        Token.Token tok = Cursor.current(state)
+        out = appendTokenText(out, tok)
+
+        if(tok.kind == openKind)(
+            depth += 1
+        ) elx(tok.kind == closeKind)(
+            depth -= 1
+
+            if(depth == 0)(
+                Cursor.advance(state)
+                ret out
+            )
+        )
+
+        Cursor.advance(state)
+    )
+
+    Token.Token last = Cursor.current(state)
+    Cursor.addError(state, last, "unterminated balanced region")
+    ret out
+)
+
+FN parseUse(REF[Cursor.State] state) -> Ast.UseDecl = (
+    Token.Token start = Cursor.expect(state, "USE", "expected use")
+    path = ""
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, "NEWLINE"))(
+        Token.Token tok = Cursor.advance(state)
+        path += tokenText(tok)
+    )
+
+    native = true
+
+    if(len(path) > 0 && path.0 == ".")(
+        native = false
+    )
+
+    ret Ast.UseDecl({
+        path = path,
+        native = native,
+        span = start.span
+    })
+)
+
+FN parseFields(REF[Cursor.State] state, STR closeKind) -> Ast.FieldDeclList = (
+    fields = []
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, closeKind))(
+        Token.Token start = Cursor.current(state)
+
+        if(Cursor.at(state, "MAP") && Cursor.peekAt(state, 1, "NAME"))(
+            Cursor.advance(state)
+            Token.Token fieldName = Cursor.expect(state, "NAME", "expected nested MAP field name")
+            Cursor.expect(state, "EQUAL", "expected '=' after nested MAP field name")
+            STR body = captureBalanced(state, "LBRACE", "RBRACE")
+            *fields.add(Ast.FieldDecl({
+                name = fieldName.lexeme,
+                typeName = "MAP",
+                initializer = body,
+                span = start.span
+            }))
+        ) else (
+            STR typeName = Types.parseTypeName(state)
+            Token.Token fieldName = Cursor.expect(state, "NAME", "expected field name")
+            initializer = ""
+
+            if(Cursor.match(state, "EQUAL"))(
+                initializer = captureUntilBoundary(state, closeKind)
+            )
+
+            *fields.add(Ast.FieldDecl({
+                name = fieldName.lexeme,
+                typeName = typeName,
+                initializer = initializer,
+                span = start.span
+            }))
+        )
+
+        Cursor.skipNewlines(state)
+        Cursor.match(state, "COMMA")
+        Cursor.skipNewlines(state)
+    )
+
+    Cursor.expect(state, closeKind, "expected end of field list")
+    ret fields
+)
+
+FN parseMapDecl(REF[Cursor.State] state) -> Ast.TypeDecl = (
+    Token.Token start = Cursor.expect(state, "MAP", "expected MAP")
+    Token.Token name = Cursor.expect(state, "NAME", "expected MAP name")
+    Cursor.expect(state, "EQUAL", "expected '=' in MAP declaration")
+    Cursor.expect(state, "LBRACE", "expected '{' after MAP declaration")
+    Ast.FieldDeclList fields = parseFields(state, "RBRACE")
+
+    ret Ast.TypeDecl({
+        kind = "MAP",
+        name = name.lexeme,
+        typeName = name.lexeme,
+        fields = fields,
+        span = start.span
+    })
+)
+
+FN parseAliasOrValue(REF[Cursor.State] state) -> Ast.TypeDecl = (
+    Token.Token start = Cursor.current(state)
+    kind = "VALUE"
+
+    if(Cursor.match(state, "TYPE"))(
+        kind = "TYPE"
+    )
+
+    if(kind == "TYPE")(
+        Token.Token name = Cursor.expect(state, "NAME", "expected TYPE name")
+        Cursor.expect(state, "EQUAL", "expected '=' in TYPE declaration")
+        STR typeName = Types.parseTypeName(state)
+        STR initializer = captureUntilBoundary(state, "EOF")
+        ret Ast.TypeDecl({
+            kind = kind,
+            name = name.lexeme,
+            typeName = typeName,
+            initializer = initializer,
+            fields = [],
+            span = start.span
+        })
+    )
+
+    STR typeName = Types.parseTypeName(state)
+    Token.Token name = Cursor.expect(state, "NAME", "expected top-level value name")
+
+    if(Cursor.match(state, "EQUAL"))(
+        STR initializer = captureUntilBoundary(state, "EOF")
+        ret Ast.TypeDecl({
+            kind = kind,
+            name = name.lexeme,
+            typeName = typeName,
+            initializer = initializer,
+            fields = [],
+            span = start.span
+        })
+    )
+
+    ret Ast.TypeDecl({
+        kind = kind,
+        name = name.lexeme,
+        typeName = typeName,
+        fields = [],
+        span = start.span
+    })
+)
+
+FN parseFnDecl(REF[Cursor.State] state) -> Ast.FnDecl = (
+    Token.Token start = Cursor.expect(state, "FN", "expected FN")
+    Token.Token name = Cursor.expect(state, "NAME", "expected function name")
+    Cursor.expect(state, "LPAREN", "expected '(' after function name")
+    Ast.ParamDeclList params = Stmt.parseParamList(state)
+    returnType = "NUL"
+
+    if(Cursor.match(state, "ARROW"))(
+        returnType = Types.parseTypeName(state)
+    )
+
+    Cursor.expect(state, "EQUAL", "expected '=' before function body")
+    Cursor.expect(state, "LPAREN", "expected '(' before function body")
+    Ast.StmtList statements = Stmt.parseBlock(state, "RPAREN")
+    Cursor.expect(state, "RPAREN", "expected ')' after function body")
+
+    ret Ast.FnDecl({
+        name = name.lexeme,
+        params = params,
+        returnType = returnType,
+        bodyTokens = len(statements),
+        statements = statements,
+        span = start.span
+    })
+)
+
+FN recoverLine(REF[Cursor.State] state) -> NUL = (
+    loop(!Cursor.atEnd(state) && !Cursor.at(state, "NEWLINE"))(
+        Cursor.advance(state)
+    )
+)
+
+FN parseProgram(REF[Cursor.State] state) -> Ast.Program = (
+    Ast.Program program = Ast.Program({})
+    Cursor.skipNewlines(state)
+
+    loop(!Cursor.atEnd(state))(
+        if(Cursor.at(state, "USE"))(
+            Ast.UseDecl item = parseUse(state)
+            *program.uses.add(item)
+        ) elx(Cursor.at(state, "MAP") && Cursor.peekAt(state, 1, "NAME") && Cursor.peekAt(state, 2, "EQUAL"))(
+            Ast.TypeDecl item = parseMapDecl(state)
+            *program.types.add(item)
+        ) elx(Cursor.at(state, "FN"))(
+            Ast.FnDecl item = parseFnDecl(state)
+            *program.functions.add(item)
+        ) elx(Cursor.at(state, "TYPE") || Types.startsType(state))(
+            Ast.TypeDecl item = parseAliasOrValue(state)
+            *program.types.add(item)
+        ) else (
+            Token.Token tok = Cursor.current(state)
+            Cursor.addError(state, tok, "expected top-level use, MAP, TYPE, value, or FN declaration")
+            recoverLine(state)
+        )
+
+        Cursor.skipNewlines(state)
+    )
+
+    ret program
+)

@@ -1,0 +1,86 @@
+{
+  "scopeName": "source.caster",
+  "name": "Caster",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.caster",
+      "match": "//.*$"
+    },
+    {
+      "name": "string.quoted.raw.backtick.caster",
+      "begin": "`",
+      "end": "`"
+    },
+    {
+      "name": "string.quoted.double.caster",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.caster",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "constant.numeric.float.caster",
+      "match": "\\b[0-9]+\\.[0-9]+\\b"
+    },
+    {
+      "name": "constant.numeric.integer.caster",
+      "match": "\\b[0-9]+\\b"
+    },
+    {
+      "name": "constant.language.caster",
+      "match": "\\b(true|false|NUL|INIT)\\b"
+    },
+    {
+      "name": "keyword.control.caster",
+      "match": "\\b(FN|ret|if|elx|else|loop|hold|throw|pass|use)\\b"
+    },
+    {
+      "name": "keyword.memory.caster",
+      "match": "\\b(REF|HEAP|FREE)\\b"
+    },
+    {
+      "name": "storage.type.caster",
+      "match": "\\b(INT|FLT|STR|BOL|ARR|MAP|OBJ|DYN|TSK|NUL)\\b"
+    },
+    {
+      "name": "support.type.module.caster",
+      "match": "\\b(REQ|WEB|SQL|OS|FS|PATH|PROC|IO|BUF)\\b"
+    },
+    {
+      "name": "support.type.module.caster",
+      "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\.)"
+    },
+    {
+      "name": "storage.type.qualified.caster",
+      "match": "(?<=\\.)[A-Z][A-Za-z0-9_]*\\b"
+    },
+    {
+      "name": "support.function.builtin.caster",
+      "match": "\\b(log|assert|len|JSON|RAND)\\b"
+    },
+    {
+      "name": "variable.language.caster",
+      "match": "\\b(e|i|val)\\b"
+    },
+    {
+      "name": "keyword.operator.word.caster",
+      "match": "\\b(IS|as)\\b"
+    },
+    {
+      "name": "keyword.operator.caster",
+      "match": "\\+=|-=|\\+\\+|==|!=|<=|>=|&&|\\|\\||->|[=+\\-*/%<>!&.*]"
+    },
+    {
+      "name": "entity.name.function.caster",
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()"
+    },
+    {
+      "name": "variable.other.caster",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+    }
+  ]
+}

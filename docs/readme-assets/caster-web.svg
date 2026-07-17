@@ -1,0 +1,60 @@
+<svg width="1040" height="720" viewBox="0 0 1040 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Caster WEB revenue example</title>
+  <desc id="desc">Syntax highlighted Caster code showing typed business data, light aggregation, one loop, and a WEB JSON response.</desc>
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7457d9"/>
+      <stop offset="0.5" stop-color="#1f7bd6"/>
+      <stop offset="1" stop-color="#a87924"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .base { font: 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #e8eef7; }
+      .title { font: 700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #8ca3b8; letter-spacing: .04em; }
+      .kw { fill: #ff5f6d; font-weight: 700; }
+      .fn { fill: #c792ea; }
+      .blue { fill: #4da3ff; }
+      .str { fill: #f6c177; }
+      .num { fill: #9dd6ff; }
+      .op { fill: #95a7bd; }
+      .comment { fill: #8ca3b8; font-style: italic; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1038" height="718" rx="18" fill="url(#rim)" opacity="0.9"/>
+  <rect x="3" y="3" width="1034" height="714" rx="17" fill="#0f1420"/>
+  <path d="M18 66 C188 38 251 96 408 58 C571 19 668 83 816 53 C915 33 974 45 1017 66" fill="none" stroke="#7457d9" stroke-width="1.4" opacity="0.42" filter="url(#glow)"/>
+  <circle cx="31" cy="31" r="6" fill="#ff5f6d"/>
+  <circle cx="54" cy="31" r="6" fill="#f6c177"/>
+  <circle cx="77" cy="31" r="6" fill="#4da3ff"/>
+  <text class="title" x="924" y="36">WEB.CAST</text>
+
+  <text class="base" x="36" y="78"><tspan class="kw">use</tspan><tspan> </tspan><tspan class="blue">WEB</tspan></text>
+
+  <text class="base" x="36" y="120"><tspan class="blue">MAP</tspan><tspan> Sale </tspan><tspan class="op">=</tspan><tspan> {</tspan></text>
+  <text class="base" x="70" y="150"><tspan class="blue">STR</tspan><tspan> region </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="str">""</tspan></text>
+  <text class="base" x="70" y="180"><tspan class="blue">FLT</tspan><tspan> amount </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="num">0.0</tspan></text>
+  <text class="base" x="36" y="210"><tspan>}</tspan></text>
+
+  <text class="base" x="36" y="252"><tspan class="blue">ARR</tspan><tspan>[Sale] sales </tspan><tspan class="op">=</tspan><tspan> [</tspan></text>
+  <text class="base" x="70" y="282"><tspan>{ region </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="str">"East"</tspan><tspan>, amount </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="num">120.0</tspan><tspan> },</tspan></text>
+  <text class="base" x="70" y="312"><tspan>{ region </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="str">"West"</tspan><tspan>, amount </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="num">90.0</tspan><tspan> }</tspan></text>
+  <text class="base" x="36" y="342"><tspan>]</tspan></text>
+
+  <text class="base" x="36" y="390"><tspan class="kw">FN</tspan><tspan> </tspan><tspan class="fn">main</tspan><tspan>() </tspan><tspan class="op">-&gt;</tspan><tspan> </tspan><tspan class="blue">NUL</tspan><tspan> </tspan><tspan class="op">=</tspan><tspan> (</tspan></text>
+  <text class="base" x="70" y="420"><tspan>app </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="blue">WEB</tspan><tspan>.</tspan><tspan class="fn">app</tspan><tspan>({ port </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="num">8000</tspan><tspan> })</tspan></text>
+  <text class="base" x="70" y="450"><tspan class="blue">WEB</tspan><tspan>.</tspan><tspan class="fn">get</tspan><tspan>(</tspan><tspan class="kw">REF</tspan><tspan> app, </tspan><tspan class="str">"/revenue"</tspan><tspan>, [], revenue)</tspan></text>
+  <text class="base" x="70" y="480"><tspan class="blue">WEB</tspan><tspan>.</tspan><tspan class="fn">listen</tspan><tspan>(</tspan><tspan class="kw">REF</tspan><tspan> app)</tspan></text>
+  <text class="base" x="36" y="510"><tspan>)</tspan></text>
+
+  <text class="base" x="36" y="558"><tspan class="kw">FN</tspan><tspan> </tspan><tspan class="fn">revenue</tspan><tspan>(</tspan><tspan class="blue">WEB</tspan><tspan>.Req req) </tspan><tspan class="op">-&gt;</tspan><tspan> </tspan><tspan class="blue">WEB</tspan><tspan>.Res </tspan><tspan class="op">=</tspan><tspan> (</tspan></text>
+  <text class="base" x="70" y="588"><tspan>total </tspan><tspan class="op">=</tspan><tspan> sales</tspan><tspan class="op">.</tspan><tspan class="fn">agg</tspan><tspan>(</tspan><tspan class="op">+=</tspan><tspan> </tspan><tspan class="op">.</tspan><tspan>amount)</tspan></text>
+  <text class="base" x="70" y="618"><tspan class="kw">loop</tspan><tspan>([sales])( </tspan><tspan class="fn">log</tspan><tspan>(e.region, e.amount) )</tspan></text>
+  <text class="base" x="70" y="648"><tspan class="kw">ret</tspan><tspan> </tspan><tspan class="blue">WEB</tspan><tspan>.</tspan><tspan class="fn">json</tspan><tspan>({ total </tspan><tspan class="op">=</tspan><tspan> total, count </tspan><tspan class="op">=</tspan><tspan> sales</tspan><tspan class="op">.</tspan><tspan class="fn">len</tspan><tspan>() })</tspan></text>
+  <text class="base" x="36" y="678"><tspan>)</tspan><tspan class="comment"> // {"total": 210.0, "count": 2}</tspan></text>
+</svg>

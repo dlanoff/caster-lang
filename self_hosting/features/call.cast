@@ -1,0 +1,21 @@
+use ./feature
+
+FN register(Feature.FeatureSet features) -> Feature.FeatureSet = (
+    features = Feature.addRule(features, Feature.openDelimiter(
+        "CALL",
+        "open",
+        "LPAREN",
+        "RPAREN",
+        "function calls, grouped expressions, control bodies, and signatures all share parenthesized boundaries"
+    ))
+
+    features = Feature.addRule(features, Feature.closeDelimiter(
+        "CALL",
+        "close",
+        "RPAREN",
+        "LPAREN",
+        "parenthesis balance lets later passes decide whether a region belongs to a call, function body, or expression group"
+    ))
+
+    ret features
+)

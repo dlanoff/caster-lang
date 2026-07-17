@@ -1,0 +1,15 @@
+MAP LocalUser = {
+    STR name = "Ada",
+    INT age = 32
+}
+
+FN localGreeting(STR name) -> STR = (
+    ret "hello " + name
+)
+
+FN localUser() -> LocalUser = (
+    ret {
+        name = "Lin",
+        age = 35
+    }
+)

@@ -1,0 +1,272 @@
+use PATH
+use ./../ast/ast
+use ./../features/feature
+use ./../lex/lexer
+use ./../parse/parser
+use ./../driver/diagnostics
+use ./../driver/source
+use ./../lex/token
+
+ARR[STR] StringList = []
+
+MAP LoadResult = {
+    Ast.Program program = INIT,
+    ARR[STR] loaded = [],
+    Diagnostics.DiagnosticList diagnostics = []
+}
+
+FN emptyStringList() -> StringList = (
+    ret []
+)
+
+FN hasSuffix(STR text, STR suffix) -> BOL = (
+    if(len(text) < len(suffix))(
+        ret false
+    )
+
+    offset = len(text) - len(suffix)
+    chars = suffix.ARR()
+
+    loop([chars])(
+        if(text.[offset + i] != e)(
+            ret false
+        )
+    )
+
+    ret true
+)
+
+FN ensureCastExt(STR path) -> STR = (
+    if(hasSuffix(path, ".cast"))(
+        ret path
+    )
+
+    ret path + ".cast"
+)
+
+FN withoutLast(StringList items) -> StringList = (
+    StringList out = emptyStringList()
+
+    loop([items])(
+        if(i < len(items) - 1)(
+            *out.add(e)
+        )
+    )
+
+    ret out
+)
+
+FN pushPathPart(REF[StringList] parts, STR part) -> NUL = (
+    if(part == "" || part == ".")(
+        ret
+    )
+
+    if(part == "..")(
+        if(len(parts) > 0 && parts.[len(parts) - 1] != "..")(
+            *parts = withoutLast(parts)
+        ) else (
+            *parts.add(part)
+        )
+
+        ret
+    )
+
+    *parts.add(part)
+)
+
+FN normalizePath(STR path) -> STR = (
+    StringList parts = emptyStringList()
+    part = ""
+    absolute = len(path) > 0 && path.0 == "/"
+    chars = path.ARR()
+
+    loop([chars])(
+        if(e == "/")(
+            pushPathPart(REF parts, part)
+            part = ""
+        ) else (
+            part += e
+        )
+    )
+
+    pushPathPart(REF parts, part)
+
+    out = ""
+
+    if(absolute)(
+        out = "/"
+    )
+
+    loop([parts])(
+        if(i > 0)(
+            out += "/"
+        )
+
+        out += e
+    )
+
+    if(out == "")(
+        ret "."
+    )
+
+    ret out
+)
+
+FN isLocalSpec(STR spec) -> BOL = (
+    ret len(spec) > 0 && spec.0 == "."
+)
+
+FN titleName(STR raw) -> STR = (
+    out = ""
+    upperNext = true
+    chars = raw.ARR()
+
+    loop([chars])(
+        if(e == "." || e == "-" || e == "_")(
+            upperNext = true
+        ) else (
+            if(upperNext)(
+                out += upper(e)
+            ) else (
+                out += e
+            )
+
+            upperNext = false
+        )
+    )
+
+    ret out
+)
+
+FN moduleNameFromPath(STR path) -> STR = (
+    name = PATH.name(path)
+
+    if(hasSuffix(name, ".cast"))(
+        out = ""
+        chars = name.ARR()
+
+        loop([chars])(
+            if(i < len(name) - 5)(
+                out += e
+            )
+        )
+
+        name = out
+    )
+
+    ret titleName(name)
+)
+
+FN resolveImportPath(STR fromPath, STR spec) -> STR = (
+    if(isLocalSpec(spec))(
+        base = PATH.parent(fromPath)
+        returnPath = PATH.join([base, spec])
+        ret ensureCastExt(normalizePath(returnPath))
+    )
+
+    ret ""
+)
+
+FN containsPath(StringList paths, STR path) -> BOL = (
+    loop([paths])(
+        if(e == path)(
+            ret true
+        )
+    )
+
+    ret false
+)
+
+FN tagType(Ast.TypeDecl item, STR module) -> Ast.TypeDecl = (
+    ret item.upd({
+        module = module
+    })
+)
+
+FN tagFn(Ast.FnDecl item, STR module) -> Ast.FnDecl = (
+    ret item.upd({
+        module = module
+    })
+)
+
+FN appendProgram(REF[Ast.Program] target, Ast.Program sourceProgram, STR module) -> NUL = (
+    loop([sourceProgram.types])(
+        if(module == "")(
+            *target.types.add(e)
+        ) else (
+            *target.types.add(tagType(e, module))
+        )
+    )
+
+    loop([sourceProgram.functions])(
+        if(module == "")(
+            *target.functions.add(e)
+        ) else (
+            *target.functions.add(tagFn(e, module))
+        )
+    )
+)
+
+FN parseSource(Source.SourceFile source, Feature.FeatureSet features) -> Parser.ParseResult = (
+    Token.TokenList tokens = Lexer.lexSource(source)
+    ret Parser.parseTokens(source.path, tokens, features)
+)
+
+FN loadFrom(Source.SourceFile source, Feature.FeatureSet features, STR module, REF[StringList] loaded) -> LoadResult = (
+    Ast.Program merged = Ast.Program({})
+    Diagnostics.DiagnosticList diagnostics = Diagnostics.emptyList()
+    canonicalPath = source.path
+
+    if(canonicalPath != "")(
+        canonicalPath = normalizePath(canonicalPath)
+    )
+
+    if(canonicalPath != "" && containsPath(loaded, canonicalPath))(
+        ret {
+            program = merged,
+            loaded = loaded,
+            diagnostics = diagnostics
+        }
+    )
+
+    if(canonicalPath != "")(
+        *loaded.add(canonicalPath)
+    )
+
+    canonicalSource = source.upd({
+        path = canonicalPath
+    })
+
+    Parser.ParseResult parsed = parseSource(canonicalSource, features)
+
+    loop([parsed.diagnostics])(
+        *diagnostics.add(e)
+    )
+
+    loop([parsed.program.uses])(
+        if(isLocalSpec(e.path))(
+            STR importPath = resolveImportPath(canonicalPath, e.path)
+            Source.SourceFile childSource = Source.loadSource(importPath)
+            STR childModule = moduleNameFromPath(importPath)
+            LoadResult child = loadFrom(childSource, features, childModule, loaded)
+            appendProgram(REF merged, child.program, "")
+
+            loop([child.diagnostics])(
+                *diagnostics.add(e)
+            )
+        )
+    )
+
+    appendProgram(REF merged, parsed.program, module)
+
+    ret {
+        program = merged,
+        loaded = loaded,
+        diagnostics = diagnostics
+    }
+)
+
+FN loadProgram(Source.SourceFile source, Feature.FeatureSet features) -> LoadResult = (
+    StringList loaded = emptyStringList()
+    ret loadFrom(source, features, "", REF loaded)
+)

@@ -1,0 +1,12 @@
+use BUF
+use ./writer
+
+FN emitBufAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static Buffer BUF_new(void) { Buffer b = {0}; return b; }`)
+    Writer.lineC(buf, `static void BUF_reserve(Buffer *buf, int64_t needed) { if (needed <= buf->cap) return; int64_t cap = buf->cap == 0 ? 256 : buf->cap; while (cap < needed) cap *= 2; char *data = realloc(buf->data, (size_t)cap); if (!data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } buf->data = data; buf->cap = cap; }`)
+    Writer.lineC(buf, `static void BUF_write(Buffer *buf, FLX_STR text) { BUF_reserve(buf, buf->len + text.len + 1); memcpy(buf->data + buf->len, text.data, (size_t)text.len); buf->len += text.len; buf->data[buf->len] = 0; }`)
+    Writer.lineC(buf, `static void BUF_line(Buffer *buf, FLX_STR text) { BUF_write(buf, text); BUF_write(buf, flx_str_lit("\\n", 1)); }`)
+    Writer.lineC(buf, `static FLX_STR BUF_toStr(Buffer buf) { if (!buf.data) return flx_str_lit("", 0); return flx_str_copy(buf.data, buf.len); }`)
+    Writer.lineC(buf, `static void BUF_free(Buffer *buf) { free(buf->data); buf->data = NULL; buf->len = 0; buf->cap = 0; }`)
+    BUF.line(buf, "")
+)

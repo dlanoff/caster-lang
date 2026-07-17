@@ -1,0 +1,81 @@
+use ./cursor
+use ./../lex/token
+
+FN isPrimitive(STR kind) -> BOL = (
+    ret kind == "INT_TYPE" || kind == "FLT_TYPE" || kind == "BOL_TYPE" || kind == "STR_TYPE" || kind == "NUL" || kind == "DYN_TYPE"
+)
+
+FN startsType(REF[Cursor.State] state) -> BOL = (
+    Token.Token tok = Cursor.current(state)
+
+    if(tok.kind == "ARR" || tok.kind == "MAP" || tok.kind == "REF" || tok.kind == "TSK" || tok.kind == "FN")(
+        ret true
+    )
+
+    if(isPrimitive(tok.kind))(
+        ret true
+    )
+
+    if(tok.kind == "NAME")(
+        ret true
+    )
+
+    ret false
+)
+
+FN parseSimpleName(REF[Cursor.State] state) -> STR = (
+    Token.Token first = Cursor.expect(state, "NAME", "expected type name")
+    name = first.lexeme
+
+    if(Cursor.match(state, "DOT"))(
+        Token.Token member = Cursor.expect(state, "NAME", "expected type name after module '.'")
+        name = name + "." + member.lexeme
+    )
+
+    ret name
+)
+
+FN parseTypeName(REF[Cursor.State] state) -> STR = (
+    Token.Token tok = Cursor.current(state)
+
+    if(isPrimitive(tok.kind))(
+        Cursor.advance(state)
+        ret tok.lexeme
+    )
+
+    if(tok.kind == "NAME")(
+        ret parseSimpleName(state)
+    )
+
+    if(tok.kind == "ARR" || tok.kind == "REF" || tok.kind == "TSK")(
+        Cursor.advance(state)
+        Cursor.expect(state, "LBRACKET", "expected '[' after type constructor")
+        STR inner = parseTypeName(state)
+        Cursor.expect(state, "RBRACKET", "expected ']' after type argument")
+        ret tok.lexeme + "[" + inner + "]"
+    )
+
+    if(tok.kind == "MAP")(
+        Cursor.advance(state)
+        Cursor.expect(state, "LBRACKET", "expected '[' after MAP")
+        STR key = parseTypeName(state)
+        Cursor.expect(state, "COMMA", "expected ',' after MAP key type")
+        STR value = parseTypeName(state)
+        Cursor.expect(state, "RBRACKET", "expected ']' after MAP value type")
+        ret "MAP[" + key + ", " + value + "]"
+    )
+
+    if(tok.kind == "FN")(
+        Cursor.advance(state)
+        Cursor.expect(state, "LBRACKET", "expected '[' after FN")
+        STR input = parseTypeName(state)
+        Cursor.expect(state, "ARROW", "expected '->' in FN type")
+        STR output = parseTypeName(state)
+        Cursor.expect(state, "RBRACKET", "expected ']' after FN return type")
+        ret "FN[" + input + " -> " + output + "]"
+    )
+
+    Cursor.addError(state, tok, "expected type")
+    Cursor.advance(state)
+    ret ""
+)

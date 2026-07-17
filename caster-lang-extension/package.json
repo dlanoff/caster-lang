@@ -1,0 +1,54 @@
+{
+  "name": "caster-lang",
+  "displayName": "Caster Language",
+  "description": "Syntax highlighting and save-time diagnostics for Caster",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:caster"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Caster",
+      "properties": {
+        "caster.compilerPath": {
+          "type": "string",
+          "default": "caster",
+          "description": "Path to the Caster command used for save-time diagnostics."
+        },
+        "caster.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run `caster check --json` on save for Caster files."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "caster",
+        "aliases": [
+          "Caster",
+          "caster"
+        ],
+        "extensions": [
+          ".cast"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "caster",
+        "scopeName": "source.caster",
+        "path": "./syntaxes/caster.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+use WEB
+
+FN main() -> NUL = (
+    app = WEB.app({
+        port = 8000
+    })
+
+    WEB.get(REF app, "/", [], ok)
+    WEB.get(REF app, "/:path", [], ok)
+
+    WEB.post(REF app, "/", [], postEcho)
+    WEB.post(REF app, "/:path", [], postEcho)
+
+    WEB.put(REF app, "/", [], putEcho)
+    WEB.put(REF app, "/:path", [], putEcho)
+
+    WEB.delete(REF app, "/", [], deleteEcho)
+    WEB.delete(REF app, "/:path", [], deleteEcho)
+
+    WEB.listen(REF app)
+)
+
+FN jsonText(STR body) -> WEB.Res = (
+    ret {
+        status = 200,
+        body = body,
+        headers = {
+            "content-type" = "application/json"
+        }
+    }
+)
+
+FN ok(REF[WEB.Req] req) -> WEB.Res = (
+    if(req.path == "")(
+        pass
+    )
+
+    ret jsonText(`{"status": "ok", "message": "Hello from Caster"}`)
+)
+
+FN postEcho(REF[WEB.Req] req) -> WEB.Res = (
+    if(req.body == "")(
+        ret jsonText(`{"method": "POST", "body": ""}`)
+    )
+
+    ret jsonText(`{"method": "POST", "body": ` + req.body + `}`)
+)
+
+FN putEcho(REF[WEB.Req] req) -> WEB.Res = (
+    if(req.body == "")(
+        ret jsonText(`{"method": "PUT", "body": ""}`)
+    )
+
+    ret jsonText(`{"method": "PUT", "body": ` + req.body + `}`)
+)
+
+FN deleteEcho(REF[WEB.Req] req) -> WEB.Res = (
+    if(req.path == "")(
+        pass
+    )
+
+    ret jsonText(`{"method": "DELETE", "body": ""}`)
+)

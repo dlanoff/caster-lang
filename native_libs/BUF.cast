@@ -1,0 +1,8 @@
+// BUF native adapter.
+//
+// Functions are provided by src/caster/adapters/buf.c and exposed as BUF.*.
+// Buffer is a small Caster handle to a growable native string buffer.
+
+MAP Buffer = {
+    INT handle = 0
+}

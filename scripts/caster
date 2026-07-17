@@ -1,0 +1,61 @@
+#!/usr/bin/env sh
+set -eu
+
+script_path=$0
+while [ -L "$script_path" ]; do
+    script_dir=$(CDPATH= cd -- "$(dirname -- "$script_path")" && pwd)
+    link_target=$(readlink "$script_path")
+    case "$link_target" in
+        /*) script_path=$link_target ;;
+        *) script_path=$script_dir/$link_target ;;
+    esac
+done
+
+if [ "$#" -lt 1 ]; then
+    echo "usage: caster <file.cast>" >&2
+    echo "       caster check --json <file.cast>" >&2
+    exit 2
+fi
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$script_path")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+
+if [ "$1" = "check" ] || [ "$1" = "--check" ]; then
+    make -C "$repo_dir" -f build/Makefile compiler >/dev/null
+    exec "$repo_dir/output/caster" "$@" --repo-root "$repo_dir"
+fi
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: caster <file.cast>" >&2
+    echo "       caster check --json <file.cast>" >&2
+    exit 2
+fi
+
+src=$1
+
+case "$src" in
+    *.cast) ;;
+    *)
+        echo "caster: expected a .cast file, got: $src" >&2
+        exit 2
+        ;;
+esac
+
+src_dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd)
+src="$src_dir/$(basename -- "$src")"
+run_root=$(pwd -P)
+
+case "$src" in
+    "$run_root"/*) rel=${src#"$run_root"/} ;;
+    *) rel=$(basename -- "$src") ;;
+esac
+
+stem=${rel%.cast}
+safe=$(printf '%s' "$stem" | sed 's#[^A-Za-z0-9_.-]#__#g')
+build_dir="$run_root/.caster"
+out="$build_dir/$safe.C"
+exe="$build_dir/$safe"
+
+mkdir -p "$build_dir"
+make -C "$repo_dir" -f build/Makefile compiler >/dev/null
+exec "$repo_dir/output/caster" "$src" -o "$out" --exe "$exe" --repo-root "$repo_dir"

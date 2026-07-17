@@ -1,0 +1,2 @@
+// REQ is implemented by the C runtime adapter.
+// This module marker makes `use REQ` explicit in Caster source.

@@ -1,0 +1,2041 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Caster Documentation</title>
+    <link href="styles.css" rel="stylesheet" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#top"> Caster </a>
+      <p class="version">Current language reference</p>
+      <nav aria-label="Documentation">
+        <span class="nav-group"> Start Here </span>
+        <a href="#overview"> Overview </a>
+        <a href="#why"> Why Caster </a>
+        <a href="#first-program"> First Program </a>
+        <a href="#programs"> Program Structure </a>
+        <span class="nav-group"> Core Language </span>
+        <a href="#types"> Types </a>
+        <a href="#values"> Values And Inference </a>
+        <a href="#functions"> Functions </a>
+        <a href="#maps"> MAPs </a>
+        <a href="#arrays"> Arrays </a>
+        <a href="#strings"> Strings </a>
+        <a href="#dot"> Dot Access </a>
+        <a href="#operators"> Operators </a>
+        <a href="#is-operator"> IS Operator </a>
+        <a href="#control"> Control Flow </a>
+        <a href="#loops"> Loops </a>
+        <span class="nav-group"> Data Work </span>
+        <a href="#collections"> Collections </a>
+        <a href="#tour"> Language Tour </a>
+        <a href="#refs"> REF And Mutation </a>
+        <a href="#json"> JSON And DYN </a>
+        <a href="#sql"> SQL </a>
+        <span class="nav-group"> Runtime </span>
+        <a href="#tasks"> Tasks And Hold </a>
+        <a href="#req"> REQ </a>
+        <span class="nav-group"> Project </span>
+        <a href="#imports"> Imports </a>
+        <a href="#testing"> Testing </a>
+        <a href="#compile"> Compile And Run </a>
+        <a href="#examples"> Examples </a>
+        <a href="#limits"> Current Limits </a>
+        <span class="nav-group"> Advanced </span>
+        <a href="#memory"> Memory </a>
+      </nav>
+    </aside>
+    <div aria-atomic="true" aria-live="polite" class="section-caster">
+      <span aria-hidden="true" class="section-caster-wand"> 🪄 </span>
+      <span aria-hidden="true" class="section-caster-bolt"> ✨ </span>
+      <span class="section-caster-label"> Overview </span>
+    </div>
+    <main class="content" id="top">
+      <header class="hero">
+        <p class="eyebrow">Caster Language</p>
+        <h1>Script-like readability, native-like power.</h1>
+        <p>
+          Caster is a small compiled experimental language for writing code that
+          feels quick and readable, but still turns into plain C under the hood.
+          You get typed function signatures so APIs are clear, inferred local
+          variables so functions stay light, simple arrays and maps for everyday
+          data work, and explicit references when a function needs to mutate
+          something outside itself.
+        </p>
+      </header>
+      <section class="section" id="overview">
+        <h2>Overview</h2>
+        <p>
+          Caster is built to make everyday code feel as direct as a scripting
+          language while compiling to C with a clear, predictable runtime model.
+          Function boundaries are explicitly typed, local variables are
+          inferred, and values copy by default. Mutation that can affect the
+          caller is made visible through <code>REF</code>, while function-local
+          borrows remain scoped to the values that own them.
+        </p>
+        <div class="feature-grid">
+          <div>
+            <h3>Typed edges</h3>
+            <p>
+              Function parameters and return values are explicit, so APIs stay
+              readable and compiler-checkable.
+            </p>
+          </div>
+          <div>
+            <h3>Inferred bodies</h3>
+            <p>
+              Simple local variables are inferred, while locals that start from
+              user-written function calls name the function return type.
+            </p>
+          </div>
+          <div>
+            <h3>Value-first data</h3>
+            <p>
+              Normal values copy. Mutation that affects the caller is visible
+              through
+              <code> REF </code>
+              .
+            </p>
+          </div>
+          <div>
+            <h3>C as the backend</h3>
+            <p>
+              Caster emits C and links against a small runtime for strings,
+              arrays, maps, JSON, tasks, and HTTP.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="section" id="why">
+        <h2>Why Caster</h2>
+        <p>
+          Caster tries to keep the parts that make C feel powerful while
+          removing the parts that make small programs noisy. You still see
+          mutation. You still know where references cross function boundaries.
+          You still get generated C. But you also get arrays, maps, strings,
+          JSON, route helpers, typed tasks, and cleanup rules that are part of
+          the language instead of scattered across hand-written C code.
+        </p>
+      </section>
+      <section class="section" id="first-program">
+        <h2>First Program</h2>
+        <p>
+          A function begins with
+          <code> FN </code>
+          , declares its parameter types, and always declares a return type.
+          Bodies use Caster's parenthesized block form.
+        </p>
+        <pre><code>FN greet(STR name) -&gt; STR = (
+    ret "Hello, " + name
+)
+
+FN main() -&gt; NUL = (
+    STR message = greet("Caster")
+    log(message) // Hello, Caster
+)</code></pre>
+        <p>
+          The stored result of
+          <code> greet(...) </code>
+          is explicitly typed because it crosses a function-call boundary.
+          Values derived locally from
+          <code> message </code>
+          may be inferred.
+        </p>
+      </section>
+      <section class="section" id="programs">
+        <h2>Program Structure</h2>
+        <p>
+          Imports live first, followed by MAP declarations and functions.
+          Function contracts are collected before bodies are analyzed, so
+          helpers can be written below the code that uses them. The only special
+          placement rule is
+          <code> main() </code>
+          : it can live near the top for readability, and the compiler emits it
+          after helper functions in generated C.
+        </p>
+        <pre><code>use WEB
+
+FN main() -&gt; NUL = (
+    app = WEB.app({
+        port = 8000
+    })
+
+    WEB.get(REF app, "/accounts/:id", [auth], account)
+
+    WEB.listen(REF app)
+)
+
+FN auth(REF[WEB.Req] req) -&gt; BOL = (
+    if(!req.headers.has("authorization"))(
+        *req.res = WEB.json({
+            error = "missing authorization"
+        }, 401)
+
+        ret false
+    )
+
+    *req.ctx = req.ctx + {
+        "userId" = "user_123"
+    }
+
+    ret true
+)
+
+FN account(REF[WEB.Req] req) -&gt; WEB.Res = (
+    payments = [
+        { amount = 120, settled = true, kind = "sale" },
+        { amount = 35, settled = false, kind = "sale" },
+        { amount = 10, settled = true, kind = "refund" }
+    ]
+
+    revenue = payments
+        .filt(e.settled && e.kind == "sale")
+        .agg(
+            += e.amount
+        )
+
+    ret WEB.json({
+        user = req.ctx.userId,
+        account = req.params.id,
+        revenue = revenue
+    })
+)</code></pre>
+        <p>
+          This route-first shape is why
+          <code> main() </code>
+          is anti-hoisted: the entry point can read like a table of contents,
+          while middleware and handlers stay below it as ordinary top-level
+          functions. Other functions are not anti-hoisted as a language feature.
+        </p>
+        <div class="benchmark-card">
+          <div class="benchmark-heading">
+            <div>
+              <h3>WEB Benchmark Snapshot</h3>
+              <p>
+                Local
+                <code> wrk </code>
+                comparison against a Go
+                <code> net/http </code>
+                generic-router mirror using the same mixed GET/POST workload.
+              </p>
+            </div>
+            <span> July 12, 2026 </span>
+          </div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Runtime</th>
+                <th>Throughput</th>
+                <th>Average Latency</th>
+                <th>Total Requests</th>
+                <th>Non-2xx</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong> Caster WEB </strong>
+                </td>
+                <td>~9,707 req/sec</td>
+                <td>14.95 ms</td>
+                <td>291,379 in 30.02s</td>
+                <td>2,912</td>
+              </tr>
+              <tr>
+                <td>
+                  <strong> Go net/http router </strong>
+                </td>
+                <td>~8,267 req/sec</td>
+                <td>15.47 ms</td>
+                <td>248,137 in 30.01s</td>
+                <td>2,480</td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            aria-label="Caster WEB and Go router benchmark comparison"
+            class="benchmark-chart"
+          >
+            <div class="benchmark-metric">
+              <div class="benchmark-metric-title">
+                <span> Throughput </span>
+                <span> higher is better </span>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Caster </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar caster-bar"
+                    style="--bar: 100%"
+                  ></div>
+                </div>
+                <strong> 9,707 </strong>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Go </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar fastapi-bar"
+                    style="--bar: 85.2%"
+                  ></div>
+                </div>
+                <strong> 8,267 </strong>
+              </div>
+            </div>
+            <div class="benchmark-metric">
+              <div class="benchmark-metric-title">
+                <span> Total requests </span>
+                <span> higher is better </span>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Caster </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar caster-bar"
+                    style="--bar: 100%"
+                  ></div>
+                </div>
+                <strong> 291k </strong>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Go </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar fastapi-bar"
+                    style="--bar: 85.2%"
+                  ></div>
+                </div>
+                <strong> 248k </strong>
+              </div>
+            </div>
+            <div class="benchmark-metric">
+              <div class="benchmark-metric-title">
+                <span> Latency footprint </span>
+                <span> lower is better </span>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Caster </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar caster-latency-bar"
+                    style="--bar: 96.6%"
+                  ></div>
+                </div>
+                <strong> 14.95 ms </strong>
+              </div>
+              <div class="benchmark-bar-row">
+                <span> Go </span>
+                <div class="benchmark-track">
+                  <div
+                    class="benchmark-bar fastapi-latency-bar"
+                    style="--bar: 100%"
+                  ></div>
+                </div>
+                <strong> 15.47 ms </strong>
+              </div>
+            </div>
+          </div>
+          <p class="benchmark-note">
+            Settings: 4 threads, 128 connections, 30 seconds, localhost. The
+            workload mixes GET and POST routes and intentionally includes the
+            same small non-2xx path share in both servers. Go is run with
+            <code> GOMAXPROCS=1 </code>
+            . Treat this as a local snapshot, not a long-running production
+            benchmark; it does not cover TLS, external networks, databases,
+            multi-process tuning, or soak-test behavior. Caster WEB runs on H2O
+            underneath, so this measures Caster's generated WEB glue and runtime
+            behavior on top of that C networking library.
+          </p>
+        </div>
+      </section>
+      <section class="section" id="types">
+        <h2>Types</h2>
+        <p>
+          Caster has a small set of primitive and runtime-backed types. A named
+          fixed MAP also becomes a type that can be used in function signatures
+          and arrays.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Purpose</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code> INT </code>
+              </td>
+              <td>64-bit integer.</td>
+              <td>
+                <code> INT count = 0 </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> FLT </code>
+              </td>
+              <td>Floating-point number.</td>
+              <td>
+                <code> FLT ratio = 1.5 </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> BOL </code>
+              </td>
+              <td>Boolean value.</td>
+              <td>
+                <code> BOL ready = true </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> STR </code>
+              </td>
+              <td>String value.</td>
+              <td>
+                <code> STR name = "Ada" </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> NUL </code>
+              </td>
+              <td>No-value return type and null sentinel.</td>
+              <td>
+                <code> FN run() -&gt; NUL </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> ARR[T] </code>
+              </td>
+              <td>Typed array.</td>
+              <td>
+                <code> ARR[INT] nums = [] </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> MAP Name </code>
+              </td>
+              <td>Named fixed-field value and type.</td>
+              <td>
+                <code> MAP User = { ... } </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> MAP[K, V] </code>
+              </td>
+              <td>Runtime-key map.</td>
+              <td>
+                <code> MAP[STR, INT] Scores = {} </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> DYN </code>
+              </td>
+              <td>Runtime-shaped JSON or open data.</td>
+              <td>
+                <code> data = JSON(body) </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> REF[T] </code>
+              </td>
+              <td>Borrowed reference to a value.</td>
+              <td>
+                <code> REF[Counter] counter </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> TSK[T] </code>
+              </td>
+              <td>Typed task handle.</td>
+              <td>
+                <code> TSK[REQ.Res] </code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> FN[A -&gt; B] </code>
+              </td>
+              <td>Single-argument function value.</td>
+              <td>
+                <code> FN[WEB.Req -&gt; WEB.Res] </code>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="section" id="values">
+        <h2>Values And Local Inference</h2>
+        <p>
+          Inside a function, local variables created from literals and ordinary
+          expressions infer their type. The type remains static; inference only
+          removes repetition.
+        </p>
+        <pre><code>FN describe(INT count) -&gt; STR = (
+    label = "items"
+    doubled = count * 2
+    ret STR(doubled) + " " + label
+)</code></pre>
+        <h3>Call-derived locals</h3>
+        <p>
+          A new local variable initialized directly from a user-written function
+          call declares that function's return type. Collection methods, casts,
+          builtins, native adapters, and ordinary local calculations infer.
+        </p>
+        <pre><code>FN example() -&gt; INT = (
+    ARR[Order] orders = makeOrders()
+    active = orders.filt(e.active)
+    count = active.len()
+    ret count
+)</code></pre>
+        <h3>Structural values</h3>
+        <p>
+          Anonymous MAP-shaped values may conform at a typed argument, return,
+          or declaration boundary when their fields match the target type.
+        </p>
+        <pre><code>MAP User = {
+    STR name = ""
+    INT age = 0
+}
+
+FN makeUser() -&gt; User = (
+    ret {
+        name = "Alan"
+        age = 32
+    }
+)</code></pre>
+      </section>
+      <section class="section" id="functions">
+        <h2>Functions</h2>
+        <p>
+          Functions are Caster's main typed boundary. Parameters and return
+          values are always explicit, including
+          <code> -&gt; NUL </code>
+          . The body stays lighter by inferring ordinary local work.
+        </p>
+        <h3>Declaring and returning</h3>
+        <pre><code>FN sum(INT a, INT b) -&gt; INT = (
+    ret a + b
+)
+
+FN printTotal(INT a, INT b) -&gt; NUL = (
+    total = a + b
+    log(total)
+)</code></pre>
+        <h3>Nested helpers</h3>
+        <p>
+          A function may declare a private helper inside its body. Nested
+          helpers are organizational tools, not full closures: outer state is
+          passed explicitly, usually with
+          <code> REF </code>
+          when the helper must mutate it. Nested helpers can return ordinary
+          values, but the helper function itself cannot escape the owning
+          function.
+        </p>
+        <pre><code>FN buildScore() -&gt; INT = (
+    total = 1
+    values = [1]
+
+    FN add(REF[INT] total, REF[ARR[INT]] values, INT value) -&gt; INT = (
+        *total += value
+        *values.add(value)
+        ret total
+    )
+
+    INT latest = add(REF total, REF values, 2)
+    latest = add(REF total, REF values, 3)
+
+    ret latest
+)</code></pre>
+      </section>
+      <section class="section" id="maps">
+        <h2>MAPs</h2>
+        <p>
+          Caster uses
+          <code> MAP </code>
+          for both fixed-field data and runtime-key maps. A fixed MAP is a named
+          value shape that lowers like a C struct. A dynamic
+          <code> MAP[K, V] </code>
+          is a hashmap whose keys are runtime data.
+        </p>
+        <h3>Fixed MAPs</h3>
+        <pre><code>MAP User = {
+    STR name = ""
+    INT age = 0
+}</code></pre>
+        <p>
+          Nested declarations keep a one-off shape readable when the nested data
+          belongs to that MAP. Pull the nested shape into its own named MAP when
+          it is reused across function boundaries.
+        </p>
+        <pre><code>MAP SalesRegion = {
+    STR name = "",
+    FLT currencyRate = 1.0,
+    ARR[MAP] stores = [{
+        STR name = "",
+        FLT taxRate = 1.0,
+        ARR[MAP] sales = [{
+            FLT amount = 0.0,
+            BOL completed = false
+        }]
+    }]
+}</code></pre>
+        <h3>Updating MAPs</h3>
+        <p>
+          <code> .upd({...}) </code>
+          creates an updated value. Assign it back when replacing a local value,
+          or assign the updated nested value through a
+          <code> REF </code>
+          when the caller should see the change. Nested MAPs keep their shape,
+          so deep updates stay readable without turning the data into an untyped
+          object.
+        </p>
+        <pre><code>MAP Profile = {
+    STR name = "",
+    MAP settings = {
+        STR theme = "light",
+        BOL email = true
+    }
+}
+
+FN updateProfile(Profile profile) -&gt; Profile = (
+    ret profile.upd({
+        name = "Ada",
+        settings = profile.settings.upd({
+            theme = "dark"
+        })
+    })
+)
+
+FN muteEmail(REF[Profile] profile) -&gt; NUL = (
+    *profile.settings = profile.settings.upd({
+        email = false
+    })
+)</code></pre>
+        <h3>Dynamic MAPs</h3>
+        <p>
+          Dynamic MAP entries use quoted literal keys, or <code>[expression]</code>
+          when the key is computed at runtime.
+        </p>
+        <pre><code>MAP[STR, INT] Scores = {
+    "math" = 1,
+    "science" = 2
+}</code></pre>
+        <h3>Default Values</h3>
+        <p>
+          MAP literals can be returned directly into a typed function boundary.
+          Empty nested maps and arrays use the declared defaults from the
+          receiving shape, while explicit fields override the values you care
+          about.
+        </p>
+        <pre><code>MAP Student = {
+    STR name = "Guest"
+    Scores scores = {}
+}
+
+FN namedStudent() -&gt; Student = (
+    ret {
+        name = "Ada",
+        scores = {
+            "math" = 95
+        }
+    }
+)</code></pre>
+        <p>
+          Use
+          <code> .upd({...}) </code>
+          when you want to preserve an existing runtime value and override only
+          part of it.
+        </p>
+        <h3>Typed Constructors</h3>
+        <p>
+          <code> TypeName(value) </code>
+          is a fixed
+          <code> MAP </code>
+          conformance boundary. It checks that an anonymous record or open value
+          fits the named shape, fills omitted fields from defaults, rejects
+          unknown fields, and returns the typed value.
+        </p>
+        <pre><code>FN typedUser() -&gt; User = (
+    User user = User({
+        name = "Ada"
+    })
+
+    ret user // age uses the User default
+)</code></pre>
+      </section>
+      <section class="section" id="arrays">
+        <h2>Arrays</h2>
+        <p>
+          Arrays use
+          <code> ARR[T] </code>
+          in type positions and bracket literals in value positions. Empty
+          literals resolve from a typed declaration, argument, or return
+          boundary. Methods return new arrays unless the call is prefixed with
+          the mutation operator.
+        </p>
+        <pre><code>ARR[INT] SeedNums = [1, 2, 3]
+ARR[STR] SeedNames = ["Ada", "Grace", "Lin"]
+ARR[BOL] Row = []
+ARR[Row] Grid = []
+
+FN arrayTour() -&gt; NUL = (
+    nums = SeedNums
+    names = SeedNames
+
+    nums = nums.add(4)         // [1, 2, 3, 4]
+    *nums.add([5, 6])          // nums is now [1, 2, 3, 4, 5, 6]
+
+    combined = nums + [7, 8]   // [1, 2, 3, 4, 5, 6, 7, 8]
+    doubled = nums.upd(e * 2)  // [2, 4, 6, 8, 10, 12]
+    large = nums.filt(e &gt;= 4)  // [4, 5, 6]
+    total = nums.agg( += e )   // 21
+    hasLarge = nums.any(e &gt; 5) // true
+    sorted = nums.sort(e DESC) // [6, 5, 4, 3, 2, 1]
+
+    byLength = names.group(e.len())
+    randomGrid = [10x10].fill(RAND(1) &gt; 0.7)
+    volume = [10x10x(3 * 2)].fill(0)
+)</code></pre>
+        <p>
+          <code> fill(value) </code>
+          evaluates the fill expression for each cell. Constants produce
+          repeated values, while calls such as
+          <code> RAND(1) </code>
+          produce fresh values. Each dimension expression is evaluated once and
+          must produce a nonnegative
+          <code> INT </code>
+          .
+        </p>
+      </section>
+      <section class="section" id="strings">
+        <h2>Strings</h2>
+        <p>
+          Strings are ordinary values with concatenation, indexing, comparison,
+          and runtime helpers for trimming, case conversion, replacement,
+          splitting, and joining.
+          <code> text.ARR() </code>
+          exposes a string as a sequence of one-character strings;
+          <code> parts.STR(delimiter) </code>
+          joins an array back into a string.
+        </p>
+        <pre><code>name = "Alan Turing"
+letters = name.ARR()  // ["A", "l", "a", ...]
+parts = name.ARR(" ") // ["Alan", "Turing"]
+joined = parts.STR("-") // "Alan-Turing"</code></pre>
+        <p>
+          Immediate string loops may lower directly without allocating a
+          separate array.
+        </p>
+        <pre><code>loop([name.ARR()])(
+    log(e) // "A", "l", "a", ...
+)</code></pre>
+      </section>
+      <section class="section" id="dot">
+        <h2>Universal Dot Access</h2>
+        <p>
+          Dot access is Caster's shared syntax for fixed fields, array indexes,
+          runtime map keys, and DYN traversal. A simple step uses
+          <code> .name </code>
+          or
+          <code> .0 </code>
+          . A computed step uses
+          <code> .[expression] </code>
+          .
+        </p>
+        <pre><code>user.name              // fixed MAP field
+nums.0                 // literal array index
+nums.i                 // simple local index
+nums.[i + 1]           // computed index
+grid.[row - 1].[col]   // two computed steps</code></pre>
+        <h3>Dynamic keys</h3>
+        <p>
+          On a runtime-key map, dot access uses an in-scope string local when
+          one exists; otherwise the dot name is treated as a literal string key.
+          Use computed access for larger key expressions.
+        </p>
+        <pre><code>scores = {
+    "math" = 3,
+    "science" = 5
+}
+
+subject = "science"
+score = scores.subject       // 5
+computed = scores.[subject]  // 5</code></pre>
+        <h3>DYN traversal</h3>
+        <p>
+          Dot access on
+          <code> DYN </code>
+          remains dynamic until a typed boundary or
+          <code> else </code>
+          fallback extracts a concrete value.
+        </p>
+        <pre><code>name = data.owner.name else "Guest"
+count = data.items.len else 0</code></pre>
+      </section>
+      <section class="section" id="operators">
+        <h2>Operators</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Operator</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code> + </code>
+                ,
+                <code> - </code>
+                ,
+                <code> * </code>
+                ,
+                <code> / </code>
+                ,
+                <code> % </code>
+              </td>
+              <td>Numeric arithmetic where supported.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> == </code>
+                ,
+                <code> != </code>
+                ,
+                <code> &lt; </code>
+                ,
+                <code> &lt;= </code>
+                ,
+                <code> &gt; </code>
+                ,
+                <code> &gt;= </code>
+              </td>
+              <td>Comparison.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> &amp;&amp; </code>
+                ,
+                <code> || </code>
+                ,
+                <code> ! </code>
+              </td>
+              <td>Boolean logic.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> += </code>
+              </td>
+              <td>Numeric addition or string append assignment.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> else </code>
+              </td>
+              <td>Fallback value and safe DYN extraction.</td>
+            </tr>
+          </tbody>
+        </table>
+        <pre><code>count += 1
+name += "er"
+label = data.label else "unknown"</code></pre>
+        <p>
+          Arrays and MAPs use named methods for structural mutation. This avoids
+          making
+          <code> += </code>
+          mean append, extend, merge, and overwrite depending on the receiver.
+        </p>
+      </section>
+      <section class="section" id="is-operator">
+        <h2>IS Operator</h2>
+        <p>
+          <code> IS </code>
+          establishes one comparison subject and reuses it across the following
+          clauses. A bare clause defaults to equality; a clause beginning with
+          another comparison operator uses that operator.
+        </p>
+        <pre><code>if(item.kind IS "LPAREN" || "LBRACE" || "LBRACKET")(
+    delta = 1
+)
+
+if(res.status IS &gt;= 200 &amp;&amp; &lt; 300)(
+    ret true
+)
+
+if(row IS &lt; 0 || &gt;= len(grid))(
+    ret false
+)</code></pre>
+        <p>
+          Canonical style omits an explicit
+          <code> == </code>
+          after
+          <code> IS </code>
+          . Keep ordinary property predicates explicit rather than using
+          <code> IS </code>
+          as a general implicit-receiver scope.
+        </p>
+      </section>
+      <section class="section" id="control">
+        <h2>Control Flow</h2>
+        <p>
+          Caster uses parenthesized blocks for functions and control flow. Use
+          <code> if </code>
+          ,
+          <code> elx </code>
+          , and
+          <code> else </code>
+          for branching.
+        </p>
+        <pre><code>FN classify(INT value) -&gt; STR = (
+    if(value &lt; 0)(
+        ret "negative"
+    ) elx(value == 0)(
+        ret "zero"
+    ) else(
+        ret "positive"
+    )
+)</code></pre>
+        <p>
+          A postfix conditional is useful when one expression contributes only
+          under a condition. In ordinary value selection, include
+          <code> else </code>
+          when both outcomes are required.
+        </p>
+        <pre><code>label = "alive" if(cell) else "dead"
+fee = store.processingFee if(store.active) else 0</code></pre>
+      </section>
+      <section class="section" id="loops">
+        <h2>Loops</h2>
+        <p>
+          Loops expose a small set of inferred helper values. Counted loops
+          provide
+          <code> i </code>
+          . Array loops provide
+          <code> i </code>
+          and
+          <code> e </code>
+          . Map loops provide
+          <code> e </code>
+          for the key and
+          <code> val </code>
+          for the value.
+        </p>
+        <h3>Counted, range, and condition loops</h3>
+        <pre><code>loop(3)(
+    log(i) // 0, 1, 2
+)
+
+loop(0, 5)(
+    log(e) // 0, 1, 2, 3, 4
+)
+
+loop(0, 10, 2)(
+    log(e) // 0, 2, 4, 6, 8
+)
+
+count = 0
+loop(count &lt; 3)(
+    log(count) // 0, 1, 2
+    count += 1
+)</code></pre>
+        <h3>Array and map loops</h3>
+        <pre><code>nums = [10, 20, 30]
+loop([nums])(
+    log(i, e) // 0 10, 1 20, 2 30
+)
+
+scores = {
+    "math" = 1,
+    "science" = 2
+}
+loop({scores})(
+    log(e, val) // "math" 1, "science" 2
+)</code></pre>
+        <h3>Nested loops</h3>
+        <p>
+          The loop source is evaluated before the new loop's
+          <code> e </code>
+          and
+          <code> i </code>
+          bindings are introduced. That lets a nested loop use the outer element
+          as its source, while the complete outer collection still names the
+          outer frame.
+        </p>
+        <pre><code>grid = [
+    [true, false],
+    [false, true]
+]
+
+loop([grid])(
+    loop([e])(
+        rowIndex = grid.i
+        colIndex = i
+        cell = e
+    )
+)</code></pre>
+        <p>
+          Use
+          <code> as </code>
+          only when a middle loop frame must remain addressable inside a third
+          loop.
+        </p>
+        <pre><code>loop([cube])(
+    loop([e] as rows)(
+        loop([rows.e])(
+            use(cube.i, rows.i, i, e)
+        )
+    )
+)</code></pre>
+      </section>
+      <section class="section" id="collections">
+        <h2>Collections</h2>
+        <p>
+          Collection methods are expressions by default.
+          <code> filt </code>
+          keeps elements,
+          <code> upd </code>
+          transforms them, and
+          <code> agg </code>
+          combines numeric or string contributions. Prefix supported methods
+          with
+          <code> * </code>
+          when the receiver should be mutated in place.
+        </p>
+        <h3>Filter and update</h3>
+        <pre><code>nums = [1, 2, 3, 12]
+
+doubled = nums.upd(e * 2) // [2, 4, 6, 24]
+big = nums.filt(e &gt; 2)    // [3, 12]
+
+*nums.upd(e * 2)
+*nums.filt(e &gt; 4)        // nums is now [6, 24]</code></pre>
+        <h3>Aggregation</h3>
+        <p>
+          <code> agg </code>
+          makes the combining operator explicit. The expression is evaluated
+          once per element and its result is combined into the accumulator.
+          Additive aggregation uses
+          <code> 0 </code>
+          for an empty collection. A conditional contribution may omit
+          <code> else </code>
+          ; a false condition contributes nothing.
+        </p>
+        <pre><code>total = nums.agg(
+    += e
+) // 18
+
+weighted = nums.agg(
+    += e * 2
+) // 36
+
+countBig = nums.agg(
+    += 1 if(e &gt; 10)
+) // 1</code></pre>
+        <h3>Nested collection context</h3>
+        <p>
+          Inside a collection expression, a leading dot reads from the nearest
+          current element. Named collection paths also infer a singular alias,
+          which remains available when a deeper operation shadows the nearest
+          element.
+        </p>
+        <pre><code>netRevenue = regions.agg(
+    += .stores
+        .filt(.active)
+        .agg(
+            += .sales
+                .filt(.completed &amp;&amp; !.refunded)
+                .agg(
+                    += (.amount - .discount)
+                        * store.taxRate
+                        * region.currencyRate
+                )
+            - (
+                store.processingFee
+                    if(store.active)
+                    else 0
+            )
+        )
+    - region.operatingCost
+)</code></pre>
+        <p>
+          Read the example from the inside out: each qualifying sale contributes
+          a value, stores combine their sales and subtract a store-level fee,
+          and regions combine their stores and subtract a region-level cost.
+        </p>
+        <h3>Boolean helpers</h3>
+        <pre><code>activeRegions = regions.filt(
+    .stores.any(.active)
+)</code></pre>
+        <p>
+          <code> any </code>
+          short-circuits when one element matches. The same test can be written
+          as
+          <code> .stores.filt(.active).len() &gt; 0 </code>
+          , but
+          <code> any </code>
+          states the intent directly.
+        </p>
+        <h3>Tap</h3>
+        <p>
+          <code> tap(name)(...) </code>
+          runs a checkpoint block and then returns the original receiver
+          unchanged. It is useful for logging, assertions, or assigning an
+          already-declared outer variable without breaking a chain. A tap is
+          always followed by another collection method; it is not a standalone
+          endpoint.
+        </p>
+        <pre><code>totalRevenue = 0
+
+report = orders
+    .filt(e.status IS "PAID" || "SHIPPED")
+    .tap(rows)(
+        totalRevenue = rows.agg(
+            += e.revenue
+        )
+    )
+    .filt(e.revenue &gt; 0)</code></pre>
+        <h3>Group</h3>
+        <p>
+          <code> group(keyExpression) </code>
+          creates group rows. Each group exposes
+          <code> key </code>
+          for the grouped value and
+          <code> val </code>
+          for the matching element array. The inferred alias comes from the key
+          expression when that is readable, so
+          <code> orders.group(e.region) </code>
+          exposes
+          <code> region.key </code>
+          and
+          <code> region.val </code>
+          inside the next collection method.
+        </p>
+        <pre><code>report = orders
+    .group(e.region)
+    .upd({
+        region = region.key,
+        count = region.val.len(),
+        revenue = region.val.agg(
+            += e.revenue
+        )
+    })
+    .ARR()</code></pre>
+        <h3>Complete JSON aggregate example</h3>
+        <p>
+          For a more complete example, this payload is decoded at the boundary,
+          then reduced with nested typed collection methods.
+        </p>
+        <div class="code-pair json-aggregate-pair">
+          <div>
+            <h3>JSON</h3>
+            <pre><code>data = JSON(`{
+  "regions": [
+    {
+      "name": "East",
+      "currencyRate": 1.0,
+      "operatingCost": 100,
+      "stores": [
+        {
+          "name": "East Shop",
+          "active": true,
+          "taxRate": 1.1,
+          "processingFee": 20,
+          "sales": [
+            {
+              "amount": 200,
+              "discount": 20,
+              "completed": true,
+              "refunded": false
+            },
+            {
+              "amount": 100,
+              "discount": 0,
+              "completed": true,
+              "refunded": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "West",
+      "currencyRate": 0.8,
+      "operatingCost": 50,
+      "stores": [
+        {
+          "name": "West Shop",
+          "active": true,
+          "taxRate": 1.05,
+          "processingFee": 10,
+          "sales": [
+            {
+              "amount": 300,
+              "discount": 50,
+              "completed": true,
+              "refunded": false
+            },
+            {
+              "amount": 80,
+              "discount": 0,
+              "completed": false,
+              "refunded": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`)</code></pre>
+          </div>
+          <div>
+            <h3>Typed aggregate</h3>
+            <pre><code>MAP Payload = {
+    ARR[MAP] regions = [{
+        STR name = "",
+        FLT currencyRate = 1.0,
+        FLT operatingCost = 0.0,
+        ARR[MAP] stores = [{
+            STR name = "",
+            BOL active = false,
+            FLT taxRate = 1.0,
+            FLT processingFee = 0.0,
+            ARR[MAP] sales = [{
+                FLT amount = 0.0,
+                FLT discount = 0.0,
+                BOL completed = false,
+                BOL refunded = false
+            }]
+        }]
+    }]
+}
+
+FN decodePayload(DYN data) -&gt; Payload = (
+    ret data
+)
+
+FN netRevenue(DYN data) -&gt; FLT = (
+    Payload payload = decodePayload(data)
+
+    netRevenue = payload.regions.agg(
+        += .stores
+            .filt(.active)
+            .agg(
+                += .sales
+                    .filt(.completed &amp;&amp; !.refunded)
+                    .agg(
+                        += (.amount - .discount)
+                            * store.taxRate
+                            * region.currencyRate
+                    )
+                - store.processingFee
+            )
+        - region.operatingCost
+    )
+
+    ret netRevenue
+)</code></pre>
+          </div>
+        </div>
+        <p>The expression reads as:</p>
+        <pre><code>For every region:
+    add every active store's result
+    subtract the region's operating cost
+
+For every active store:
+    add every completed, non-refunded sale's contribution
+    subtract the store's processing fee
+
+For every qualifying sale:
+    add:
+        (amount - discount)
+        &times; store tax rate
+        &times; region currency rate</code></pre>
+      </section>
+      <section class="section" id="tour">
+        <h2>Language Tour: Conway</h2>
+        <p>
+          This larger example combines named types, typed functions, dot access,
+          nested loops, aggregation, and value-oriented grid updates. It appears
+          here after the individual features so each part has already been
+          introduced.
+        </p>
+        <div class="conway-demo">
+          <div class="conway-code">
+            <pre><code>ARR[BOL] Row = []
+
+ARR[Row] Grid = []
+
+MAP RenderOpts = {
+    STR alive = "#",
+    STR dead = "."
+}
+
+MAP Offset = {
+    INT row = 0,
+    INT col = 0
+}
+
+ARR[Offset] Offsets = [
+    { row = -1, col = -1 },
+    { row = -1, col =  0 },
+    { row = -1, col =  1 },
+    { row =  0, col = -1 },
+    { row =  0, col =  1 },
+    { row =  1, col = -1 },
+    { row =  1, col =  0 },
+    { row =  1, col =  1 }
+]
+
+FN main() -&gt; NUL = (
+    Grid grid = randomGrid()
+    opts = {
+        alive = "#",
+        dead = "."
+    }
+    generation = 0
+
+    loop(true)(
+        log("generation " + STR(generation))
+        printGrid(grid, opts)
+        log("alive " + STR(countAlive(grid)))
+        log("")
+
+        grid = step(grid)
+        generation += 1
+    )
+)
+
+FN randomGrid() -&gt; Grid = (
+    ret [10x10].fill(RAND(1) &gt; 0.68)
+)
+
+FN aliveAt(Grid grid, INT row, INT col) -&gt; BOL = (
+    if(row IS &lt; 0 || &gt;= grid.len())(
+        ret false
+    )
+
+    if(col IS &lt; 0 || &gt;= grid.row.len())(
+        ret false
+    )
+
+    ret grid.row.col
+)
+
+FN neighborCount(Grid grid, INT row, INT col) -&gt; INT = (
+    ret Offsets.agg(
+        += 1 if(aliveAt(grid, row + e.row, col + e.col))
+    )
+)
+
+FN nextCell(Grid grid, INT row, INT col) -&gt; BOL = (
+    BOL alive = aliveAt(grid, row, col)
+    INT neighbors = neighborCount(grid, row, col)
+
+    if(alive)(
+        ret neighbors IS 2 || 3
+    )
+
+    ret neighbors == 3
+)
+
+FN step(Grid grid) -&gt; Grid = (
+    next = []
+
+    loop([grid])(
+        row = []
+
+        loop([e])(
+            *row.add(nextCell(grid, grid.i, i))
+        )
+
+        *next.add(row)
+    )
+
+    ret next
+)
+
+FN renderCell(BOL alive, RenderOpts opts) -&gt; STR = (
+    if(alive)(
+        ret opts.alive
+    )
+
+    ret opts.dead
+)
+
+FN renderRow(Row row, RenderOpts opts) -&gt; STR = (
+    ret row.agg(
+        += renderCell(e, opts)
+    )
+)
+
+FN printGrid(Grid grid, RenderOpts opts) -&gt; NUL = (
+    loop([grid])(
+        log(renderRow(e, opts))
+    )
+)
+
+FN countAlive(Grid grid) -&gt; INT = (
+    ret grid.agg(
+        += .agg(
+            += 1 if(e)
+        )
+    )
+)</code></pre>
+          </div>
+          <div aria-label="Animated Conway output" class="conway-output-card">
+            <div class="conway-output-header">
+              <span> caster conway.cast </span>
+              <span class="conway-output-status"> looping </span>
+            </div>
+            <pre
+              aria-live="polite"
+              class="conway-output"
+              id="conway-output"
+            ></pre>
+          </div>
+        </div>
+      </section>
+      <section class="section" id="refs">
+        <h2>REF And Mutation</h2>
+        <p>
+          The
+          <code> * </code>
+          token marks an in-place write. It can mutate an owned local value or a
+          value reached through
+          <code> REF </code>
+          .
+          <code> REF </code>
+          is needed only when a function must borrow storage owned by its
+          caller.
+        </p>
+        <pre><code>nums = [1, 2, 3]
+*nums.add(4) // mutates an owned local
+
+FN addOne(REF[ARR[INT]] nums) -&gt; NUL = (
+    *nums.add(1) // mutates the caller's array
+)
+
+addOne(REF nums)</code></pre>
+        <p>
+          Reads through a reference are automatic. The mutation marker stays at
+          the write site so the line that changes storage remains visible. A
+          source-written
+          <code> * </code>
+          inside a condition, call argument, or return expression is rejected;
+          use the reference name directly for reads.
+        </p>
+        <pre><code>MAP Counter = {
+    INT value = 0
+}
+
+FN bump(REF[Counter] counter) -&gt; NUL = (
+    *counter.value += 1
+)</code></pre>
+        <p>
+          A function-local borrow may be passed downward to helpers, but it
+          cannot be returned or stored somewhere that may outlive its owner.
+        </p>
+      </section>
+      <section class="section" id="json">
+        <h2>JSON And DYN</h2>
+        <p>
+          <code> DYN </code>
+          represents runtime-shaped data, usually produced by
+          <code> JSON(str) </code>
+          . Dot and index access on DYN remain dynamic. Decode at a typed
+          boundary before the main calculation, or use
+          <code> else </code>
+          when a local fallback is sufficient.
+        </p>
+        <pre><code>MAP Account = {
+    INT id = 0,
+    FLT balance = 0.0,
+    BOL active = false,
+
+    MAP owner = {
+        STR name = "Guest",
+        STR email = ""
+    }
+}
+
+FN decodeAccount(DYN data) -&gt; Account = (
+    ret {
+        id = data.id else 0,
+        balance = data.balance else 0.0,
+        active = data.active else false,
+        owner = {
+            name = data.owner.name else "Guest",
+            email = data.owner.email else ""
+        }
+    }
+)</code></pre>
+        <p>
+          Typed decode currently supports fixed MAPs, dynamic
+          <code> MAP[STR, T] </code>
+          , nested MAPs, arrays, FLT values, JSON
+          <code> null </code>
+          as NUL-compatible data, and nested DYN access with safe fallback.
+        </p>
+      </section>
+      <section class="section" id="sql">
+        <h2>SQL</h2>
+        <p>
+          The native
+          <code> SQL </code>
+          module wraps SQLite for small embedded databases. Statements use
+          positional parameters, execution results are typed, and query rows
+          return
+          <code> DYN </code>
+          so callers can decode into their own MAP shapes at the boundary.
+        </p>
+        <pre><code>use SQL
+
+MAP User = {
+    INT id = 0,
+    STR name = "",
+    BOL active = false
+}
+
+FN decodeUsers(DYN data) -&gt; ARR[User] = (
+    ret data
+)
+
+FN main() -&gt; NUL = (
+    db = SQL.open("app.db")
+
+    SQL.exec(REF db, `
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL
+        )
+    `, [])
+
+    inserted = SQL.exec(REF db, `
+        INSERT INTO users (name, active)
+        VALUES (?, ?)
+    `, ["Ada", true])
+
+    log("inserted " + STR(inserted.rows)) // inserted 1
+
+    rows = SQL.query(REF db, `
+        SELECT id, name, active
+        FROM users
+        WHERE active = ?
+        ORDER BY name
+    `, [true])
+
+    ARR[User] users = decodeUsers(rows)
+
+    loop([users])(
+        log(e.id, e.name) // 1 Ada
+    )
+
+    SQL.close(REF db)
+)</code></pre>
+      </section>
+      <section class="section" id="tasks">
+        <h2>Tasks And Hold</h2>
+        <p>
+          <code> TSK[T] </code>
+          is a typed wrapper around a generic task handle. Requests create hot
+          tasks.
+          <code> hold task </code>
+          waits for one task.
+          <code> hold [taskA, taskB] </code>
+          waits for all tasks and returns results in input order.
+        </p>
+        <pre><code>TSK[REQ.Res] userTask = REQ.get(base + "/users/101")
+TSK[REQ.Res] postsTask = REQ.get(base + "/users/101/posts")
+
+ARR[REQ.Res] results = hold [userTask, postsTask]
+
+user = results.0
+posts = results.1</code></pre>
+      </section>
+      <section class="section" id="req">
+        <h2>REQ</h2>
+        <p>
+          <code> REQ </code>
+          is the lower-level HTTP layer. Client requests return
+          <code> TSK[REQ.Res] </code>
+          . Hosting starts a blocking H2O-backed HTTP server, with
+          <code> REQ.hostTLS </code>
+          available for certificate-backed HTTPS. Low-level
+          <code> REQ.ws </code>
+          and
+          <code> REQ.wsTLS </code>
+          expose WebSocket servers when H2O is built with wslay.
+        </p>
+        <pre><code>TSK[REQ.Res] task = REQ.get("http://localhost:8000/")
+REQ.Res res = hold task
+
+TSK[REQ.Res] postTask = REQ.post("http://localhost:8000/echo", `{"name":"Alan"}`)
+REQ.Res postRes = hold postTask</code></pre>
+        <pre><code>FN status(REQ.Req req) -&gt; REQ.Res = (
+    ret {
+        status = 200,
+        body = "ok",
+        headers = {}
+    }
+)
+
+FN main() -&gt; NUL = (
+    REQ.host(8080, status)
+)</code></pre>
+        <pre><code>FN echoSocket(STR message) -&gt; STR = (
+    ret message
+)
+
+FN main() -&gt; NUL = (
+    REQ.ws(8081, echoSocket)
+)</code></pre>
+      </section>
+      <section class="section" id="imports">
+        <h2>Imports</h2>
+        <p>
+          Native imports use
+          <code> use NAME </code>
+          and load
+          <code> native_libs/NAME.cast </code>
+          . The imported file declares normal functions and values; callers
+          access them through a namespace such as
+          <code> WEB.get </code>
+          .
+        </p>
+        <pre><code>use WEB
+
+WEB.get(REF app, "/", [], home)</code></pre>
+        <p>
+          Local imports use
+          <code> use ./file </code>
+          and load relative Caster files as explicit modules. Imported functions
+          and types stay behind that module name.
+        </p>
+        <pre><code>use ./localFile
+
+FN greet(LocalFile.LocalUser user) -&gt; STR = (
+    ret LocalFile.localGreeting(user.name)
+)</code></pre>
+      </section>
+      <section class="section" id="testing">
+        <h2>Testing</h2>
+        <p>
+          Caster includes
+          <code> assert(BOL) </code>
+          and
+          <code> assert(BOL, STR) </code>
+          . Failed assertions print in red. The project test suite keeps focused
+          one-feature-per-function coverage in
+          <code> tests/authoritative.cast </code>
+          .
+        </p>
+        <pre><code>FN testMath() -&gt; BOL = (
+    ret 2 + 2 == 4
+)
+
+assert(testMath(), "math works")</code></pre>
+      </section>
+      <section class="section" id="compile">
+        <h2>Compile And Run</h2>
+        <p>
+          The runner compiles into a hidden
+          <code> .caster/ </code>
+          folder at the current project root, then runs the generated binary
+          from that folder. Source files in subdirectories use path-derived
+          artifact names, so each run root has one hidden build folder.
+        </p>
+        <p>
+          Install the wrapper into
+          <code> $HOME/.local/bin </code>
+          once with
+          <code> make install-caster </code>
+          to use
+          <code> caster foo.cast </code>
+          globally. Installation first checks for a C11-capable compiler.
+        </p>
+        <pre><code>caster ./tests/conway.cast
+caster ./examples/server.cast
+make test</code></pre>
+      </section>
+      <section class="section" id="examples">
+        <h2>Examples</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Shows</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code> tests/authoritative.cast </code>
+              </td>
+              <td>Core language feature coverage.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> tests/conway.cast </code>
+              </td>
+              <td>Modern Caster style through Conway's Game of Life.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> tests/linkedList.cast </code>
+              </td>
+              <td>
+                Recursive
+                <code> REF[Node] </code>
+                traversal, nested-helper mutation, and strict
+                <code> FREE </code>
+                .
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> tests/sql.cast </code>
+              </td>
+              <td>
+                SQLite adapter usage, parameter binding, DYN query rows, and
+                typed decode.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> tests/project_test/web.cast </code>
+              </td>
+              <td>
+                WEB imports, routing, params, dispatch, and JSON responses.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code> examples/webapp.cast </code>
+              </td>
+              <td>Small service using WEB route helpers.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> examples/server.cast </code>
+              </td>
+              <td>Caster equivalent of the Python test server workflow.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> examples/bankserver.cast </code>
+              </td>
+              <td>Larger WEB server example with JSON request parsing.</td>
+            </tr>
+            <tr>
+              <td>
+                <code> examples/auth.cast </code>
+              </td>
+              <td>WEB middleware and request context example.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="section" id="limits">
+        <h2>Current Limits</h2>
+        <p>
+          Caster is broad enough for typed scripts, demos, and basic HTTP
+          services, but it is still an experimental language. The areas below
+          are intentionally conservative while the memory model and runtime
+          mature.
+        </p>
+        <ul>
+          <li>
+            JSON diagnostics and wrong-shape decode policy need more precision.
+          </li>
+          <li>
+            REQ client headers/options, WebSockets, cancellation, task errors,
+            and richer scheduler integration remain incomplete.
+          </li>
+          <li>REF escape and lifetime diagnostics need more coverage.</li>
+          <li>
+            Direct local
+            <code> REF </code>
+            escapes are rejected, but indirect borrowed-return effects still
+            need stronger diagnostics.
+          </li>
+          <li>
+            Request arenas remain optional future work if hosted services need
+            bulk allocation.
+          </li>
+          <li>
+            Empty literal inference beyond array locals needs broader
+            typed-boundary support.
+          </li>
+          <li>
+            Anonymous structural conformance for deeply nested arrays/maps is
+            still being expanded.
+          </li>
+        </ul>
+      </section>
+      <section class="section" id="memory">
+        <p class="eyebrow">Advanced</p>
+        <h2>Memory</h2>
+        <p>
+          Caster is value-oriented until a function explicitly asks for a
+          reference. The practical pattern is to let an outer function own the
+          state, then define nested helpers that receive
+          <code> REF </code>
+          parameters for the exact values they mutate. The helper cannot escape
+          the outer function, and every mutation is visible at the call site
+          through
+          <code> REF value </code>
+          and the
+          <code> * </code>
+          mutation operator.
+        </p>
+        <pre><code>MAP Node = {
+    INT value = 0,
+    REF[Node] next = NUL
+}
+
+MAP List = {
+    REF[Node] head = NUL,
+    REF[Node] tail = NUL,
+    INT count = 0
+}
+
+FN testNestedAppendAndPrint() -&gt; BOL = (
+    list = { head = NUL, tail = NUL, count = 0 }
+    first = { value = 0, next = NUL }
+    second = { value = 0, next = NUL }
+    third = { value = 0, next = NUL }
+
+    FN append(REF[List] list, REF[Node] node, INT value) -&gt; NUL = (
+        *node.value = value
+        *node.next = NUL
+
+        if(list.head == NUL)(
+            *list.head = node
+            *list.tail = node
+        ) else (
+            tail = list.tail
+            *tail.next = node
+            *list.tail = node
+        )
+
+        *list.count += 1
+    )
+
+    FN printList(REF[List] list) -&gt; NUL = (
+        current = list.head
+
+        loop(current != NUL)(
+            log(current.value) // 10, 20, 30
+            current = current.next
+        )
+    )
+
+    append(REF list, REF first, 10)
+    append(REF list, REF second, 20)
+    append(REF list, REF third, 30)
+
+    printList(REF list)
+
+    ret list.count == 3
+        &amp;&amp; list.head.value == 10
+        &amp;&amp; list.head.next.value == 20
+        &amp;&amp; list.tail.value == 30
+)</code></pre>
+        <h3>What Owns What</h3>
+        <p>
+          In the linked-list example, the outer function owns
+          <code> list </code>
+          ,
+          <code> first </code>
+          ,
+          <code> second </code>
+          , and
+          <code> third </code>
+          . The list stores references to those nodes, but the references do not
+          own the nodes. When the function ends, the owned locals are cleaned up
+          by the normal function cleanup path.
+        </p>
+        <p>
+          <code> REF[T] </code>
+          appears in type positions: MAP fields and function signatures. It
+          means "address to
+          <code> T </code>
+          ".
+          <code> REF value </code>
+          appears in expression positions and creates a borrowed reference to an
+          existing value. It does not transfer ownership and it cannot be
+          manually freed.
+        </p>
+        <h3>Mutation Operator</h3>
+        <p>
+          Reads through a reference are intentionally light:
+          <code> list.head </code>
+          reads the current head,
+          <code> current.value </code>
+          reads a node value, and
+          <code> current.next </code>
+          follows the link. The
+          <code> * </code>
+          token marks caller-visible mutation:
+          <code> *list.head = node </code>
+          ,
+          <code> *tail.next = node </code>
+          , and
+          <code> *list.count += 1 </code>
+          all mutate through a reference. The mutation operator is
+          statement-only, so read expressions use the normal name:
+          <code> len(list) </code>
+          instead of
+          <code> len(*list) </code>
+          .
+        </p>
+        <h3>Escape Rule</h3>
+        <p>
+          The safety rule is simple: a stored reference must not outlive the
+          value it points at. Borrowing local nodes into a local list is fine
+          while the list stays inside the same owning function. Returning that
+          reference-shaped list, assigning it to a global, or capturing it in a
+          longer-lived task would require the compiler to prove the nodes live
+          long enough; otherwise it is rejected.
+        </p>
+        <pre><code>FN badReturn() -&gt; REF[Node] = (
+    node = { value = 0, next = NUL }
+
+    ret REF node // rejected: node is function-local
+)
+
+FN badStore() -&gt; NUL = (
+    left = { value = 0, next = NUL }
+    right = { value = 0, next = NUL }
+
+    left.next = REF right // rejected if the stored borrow can escape
+)</code></pre>
+        <h3>Returning Durable Structures</h3>
+        <p>
+          When a linked structure must be returned, prefer a value-owned shape
+          rather than REF fields to local nodes. An array-backed list stores
+          nodes by value and links by index, so the returned
+          <code> List </code>
+          owns the full reachable structure.
+        </p>
+        <pre><code>MAP ValueNode = {
+    INT value = 0,
+    INT next = -1
+}
+
+MAP ValueList = {
+    INT head = -1,
+    ARR[ValueNode] nodes = []
+}</code></pre>
+        <h3>Automatic Cleanup</h3>
+        <p>
+          Primitive values copy directly. Heap-backed values include
+          <code> STR </code>
+          ,
+          <code> ARR[T] </code>
+          , dynamic
+          <code> MAP[K, V] </code>
+          , open MAP values,
+          <code> DYN </code>
+          /JSON objects, and task handles. The compiler tracks owned locals and
+          emits cleanup on explicit
+          <code> ret </code>
+          , function fallthrough, and hidden script-main fallthrough. Returning
+          an owned local transfers that value to the caller; other owned locals
+          are cleaned up first.
+        </p>
+        <p>
+          Hosted
+          <code> REQ.host </code>
+          /
+          <code> WEB </code>
+          requests also have a runtime cleanup boundary. The host drops concrete
+          request strings/maps and response strings/maps after dispatch and
+          response write. Handler-local values still follow normal compiler
+          cleanup rules.
+        </p>
+        <h3>Manual FREE</h3>
+        <p>
+          <code> FREE(value) </code>
+          and
+          <code> FREE value </code>
+          are available for early cleanup when the analyzer can prove the local
+          owns heap-backed runtime storage. Borrowed references cannot be freed:
+          the owning value is responsible for cleanup.
+        </p>
+        <pre><code>FN borrowedRef() -&gt; NUL = (
+    value = 10
+    ptr = REF value
+
+    FREE ptr // rejected: borrowed reference
+)</code></pre>
+        <h3>Runtime Allocation Sites</h3>
+        <p>
+          <code> STR </code>
+          carries a data pointer, length, and owned flag in generated C. String
+          literals are borrowed/static; concatenation, string transforms, JSON
+          parsing, and HTTP body handling create owned strings. Arrays lower to
+          structs with
+          <code> data </code>
+          ,
+          <code> len </code>
+          , and
+          <code> cap </code>
+          . Dynamic maps and open objects use
+          <code> hashmap.c </code>
+          ; string-keyed map entries own copied keys, and
+          <code> MAP[STR, STR] </code>
+          also owns copied string values.
+        </p>
+        <p>
+          <code> JSON(str) </code>
+          creates
+          <code> DYN </code>
+          values backed by internal object, array, string, number, boolean, and
+          NUL-compatible storage.
+          <code> REQ.get/post/put/delete </code>
+          return hot
+          <code> TSK[Res] </code>
+          values backed by generic task handles with runtime destroy callbacks.
+        </p>
+        <h3>Current Limits</h3>
+        <ul>
+          <li>
+            Direct local
+            <code> REF </code>
+            escapes are rejected, but indirect borrowed returns through helper
+            calls still need stronger diagnostics.
+          </li>
+          <li>
+            Recursive element ownership for arrays and dynamic maps remains
+            future collection-runtime work.
+          </li>
+          <li>
+            Borrowed REF escape diagnostics need more coverage for indirect
+            returns and longer-lived fields.
+          </li>
+          <li>
+            Request arenas remain future work if hosted services need bulk
+            request-lifetime allocation.
+          </li>
+        </ul>
+      </section>
+    </main>
+    <script src="highlight.js"></script>
+  </body>
+</html>

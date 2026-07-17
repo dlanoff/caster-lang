@@ -1,0 +1,25 @@
+use BUF
+use ./../adapters/buf
+use ./../adapters/core
+use ./../adapters/fs
+use ./../adapters/io
+use ./../adapters/os
+use ./../adapters/path
+use ./../adapters/writer
+
+FN writeCSource(REF[BUF.Buffer] buf, STR text) -> NUL = (
+    Writer.writeCSource(buf, text)
+)
+
+FN lineC(REF[BUF.Buffer] buf, STR text) -> NUL = (
+    Writer.lineC(buf, text)
+)
+
+FN emitRuntime(REF[BUF.Buffer] buf) -> NUL = (
+    Core.emitCoreAdapter(buf)
+    Buf.emitBufAdapter(buf)
+    Io.emitIoAdapter(buf)
+    Fs.emitFsAdapter(buf)
+    Os.emitOsAdapter(buf)
+    Path.emitPathAdapter(buf)
+)

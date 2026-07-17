@@ -1,0 +1,54 @@
+<svg width="1040" height="590" viewBox="0 0 1040 590" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Caster memory example</title>
+  <desc id="desc">Syntax highlighted Caster code showing REF borrowing, nested helpers, and the mutation operator.</desc>
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a87924"/>
+      <stop offset="0.5" stop-color="#7457d9"/>
+      <stop offset="1" stop-color="#1f7bd6"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .base { font: 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #e8eef7; }
+      .title { font: 700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #8ca3b8; letter-spacing: .04em; }
+      .kw { fill: #ff5f6d; font-weight: 700; }
+      .fn { fill: #c792ea; }
+      .blue { fill: #4da3ff; }
+      .type { fill: #9dd6ff; }
+      .num { fill: #9dd6ff; }
+      .op { fill: #95a7bd; }
+      .comment { fill: #8ca3b8; font-style: italic; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1038" height="588" rx="18" fill="url(#rim)" opacity="0.9"/>
+  <rect x="3" y="3" width="1034" height="584" rx="17" fill="#0f1420"/>
+  <path d="M20 75 C150 42 244 101 352 72 C495 33 604 119 742 71 C865 28 952 55 1016 94" fill="none" stroke="#f6c177" stroke-width="1.4" opacity="0.35" filter="url(#glow)"/>
+  <circle cx="31" cy="31" r="6" fill="#ff5f6d"/>
+  <circle cx="54" cy="31" r="6" fill="#f6c177"/>
+  <circle cx="77" cy="31" r="6" fill="#4da3ff"/>
+  <text class="title" x="873" y="36">MEMORY</text>
+
+  <text class="base" x="36" y="78"><tspan class="type">MAP</tspan><tspan> Counter </tspan><tspan class="op">=</tspan><tspan> {</tspan></text>
+  <text class="base" x="70" y="108"><tspan class="type">INT</tspan><tspan> value </tspan><tspan class="op">=</tspan><tspan> </tspan><tspan class="num">0</tspan></text>
+  <text class="base" x="36" y="138"><tspan>}</tspan></text>
+
+  <text class="base" x="36" y="186"><tspan class="kw">FN</tspan><tspan> </tspan><tspan class="fn">incCounter</tspan><tspan>(</tspan><tspan class="kw">REF</tspan><tspan>[Counter] counter) </tspan><tspan class="op">-&gt;</tspan><tspan> </tspan><tspan class="blue">NUL</tspan><tspan> </tspan><tspan class="op">=</tspan><tspan> (</tspan></text>
+  <text class="base" x="70" y="216"><tspan class="op">*</tspan><tspan>counter.value </tspan><tspan class="op">+=</tspan><tspan> </tspan><tspan class="num">1</tspan></text>
+  <text class="base" x="36" y="246"><tspan>)</tspan></text>
+
+  <text class="base" x="36" y="294"><tspan class="kw">FN</tspan><tspan> </tspan><tspan class="fn">useCounter</tspan><tspan>() </tspan><tspan class="op">-&gt;</tspan><tspan> </tspan><tspan class="type">BOL</tspan><tspan> </tspan><tspan class="op">=</tspan><tspan> (</tspan></text>
+  <text class="base" x="70" y="324"><tspan>counter </tspan><tspan class="op">=</tspan><tspan> Counter.</tspan><tspan class="fn">INIT</tspan><tspan>()</tspan></text>
+  <text class="base" x="70" y="354"><tspan class="kw">FN</tspan><tspan> </tspan><tspan class="fn">add</tspan><tspan>(</tspan><tspan class="kw">REF</tspan><tspan>[Counter] counter) </tspan><tspan class="op">-&gt;</tspan><tspan> </tspan><tspan class="blue">NUL</tspan><tspan> </tspan><tspan class="op">=</tspan><tspan> (</tspan></text>
+  <text class="base" x="104" y="384"><tspan class="op">*</tspan><tspan>counter.value </tspan><tspan class="op">+=</tspan><tspan> </tspan><tspan class="num">1</tspan></text>
+  <text class="base" x="36" y="414"><tspan>)</tspan></text>
+  <text class="base" x="70" y="464"><tspan class="fn">add</tspan><tspan>(</tspan><tspan class="kw">REF</tspan><tspan> counter)</tspan></text>
+  <text class="base" x="70" y="494"><tspan>ok </tspan><tspan class="op">=</tspan><tspan> counter.value </tspan><tspan class="op">==</tspan><tspan> </tspan><tspan class="num">1</tspan></text>
+  <text class="base" x="70" y="524"><tspan class="kw">ret</tspan><tspan> ok</tspan></text>
+  <text class="base" x="36" y="554"><tspan>)</tspan></text>
+</svg>

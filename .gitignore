@@ -1,0 +1,8 @@
+.DS_Store
+/output/*
+!/output/.gitkeep
+/.caster/
+**/.caster/
+.tmp.dprobes.h
+AGENTS.md
+agents.md

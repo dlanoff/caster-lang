@@ -1,0 +1,6 @@
+use BUF
+use ./writer
+
+FN emitOsAdapter(REF[BUF.Buffer] buf) -> NUL = (
+    Writer.lineC(buf, `static ARR_STR OS_args(void) { ARR_STR out = {0}; if (flx_argc <= 0) return out; out.data = malloc(sizeof(FLX_STR) * (size_t)flx_argc); if (!out.data) { fprintf(stderr, "caster: allocation failed\\n"); exit(1); } out.len = flx_argc; out.cap = flx_argc; for (int i = 0; i < flx_argc; i++) out.data[i] = flx_str_copy(flx_argv[i], (int64_t)strlen(flx_argv[i])); return out; }`)
+)
